@@ -9,7 +9,7 @@ import time
 
 from win32gui import GetForegroundWindow, GetWindowText
 
-DB_PATH = os.path.expanduser('~/toggl.db')
+DB_PATH = os.path.expanduser('~/autotoggl/toggl.db')
 
 
 def _init_db():
@@ -24,7 +24,8 @@ def _init_db():
     sql = '''CREATE TABLE toggl (
              process_name TEXT NOT NULL,
              window_title TEXT NOT NULL,
-             start INTEGER NOT NULL
+             start INTEGER NOT NULL,
+             consumed BOOLEAN NOT NULL DEFAULT false
              )'''
     cursor.execute(sql)
     return conn, cursor
@@ -32,13 +33,14 @@ def _init_db():
 
 def _add(cursor, process_name, window_title):
     print(process_name, window_title)
-    sql = '''INSERT INTO toggl VALUES (?, ?, ?)'''
+    sql = '''INSERT INTO toggl VALUES (?, ?, ?, ?)'''
     cursor.execute(
         sql,
         (
             process_name,
             window_title,
-            int(time.time())
+            int(time.time()),
+            False
         )
     )
 
