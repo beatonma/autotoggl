@@ -5,7 +5,7 @@ import re
 from argparse import ArgumentParser
 from datetime import datetime, timedelta
 
-from util import midnight
+from autotoggl.util import midnight
 
 
 class InvalidConfig(Exception):
@@ -164,6 +164,56 @@ class Config:
     def _validate_config(self):
         if not self.api_key:
             raise InvalidConfig('API key is not configured')
+
+    def _create_example_file(self, filename):
+        d = os.path.dirname(filename)
+        if not os.path.exists:
+            os.makedirs(d)
+
+        with open(filename, 'w') as f:
+            json.dump({
+                "api_key": "Enter the API token from your profile at https://toggl.com/app/profile",
+                "default_workspace": "workspace name or id",
+                "default_day": "yesterday",
+                "minimum_event_seconds": 60,
+                "day_ends_at": 3,
+                "project_definitions": [
+                    {
+                        "process": "sublime_text",
+                        "project_pattern": ".*\\((.*?)\\) - Sublime Text.*",
+                        "description_pattern": "(.*?) . \\(.*?\\) - Sublime Text.*"
+                    },
+                    {
+                        "process": "studio64",
+                        "project_pattern": "(.*?) - \\[.*\\].*",
+                        "description_pattern": ".*? - \\[.*?\\] - (.*?) - .*"
+                    },
+                    {
+                        "process": "chrome",
+                        "projects": [
+                            {
+                                "title": "Duolingo",
+                                "window_contains": [
+                                    "duolingo"
+                                ]
+                            },
+                            {
+                                "title": "Passive",
+                                "window_contains": [
+                                    "reddit",
+                                    "politics",
+                                    "starcraft",
+                                    "news",
+                                    "guardian",
+                                    "netflix"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }, f)
+
+
 
 
 class ProcessClassifier:

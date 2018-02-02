@@ -1,13 +1,14 @@
 import datetime
 import json
 import logging
+import os
 
 from datetime import timedelta, timezone
 from random import choice
 from time import sleep
 
-import autotoggl
-from autotoggl import (
+import autotoggl.autotoggl
+from autotoggl.autotoggl import (
     Event,
     categorise_event,
     categorise_events,
@@ -15,13 +16,17 @@ from autotoggl import (
     load_config,
     submit,
 )
-from config import Config
-from toggl_api import TogglApiInterface
-from util import midnight
+from autotoggl.config import Config
+from autotoggl.toggl_api import TogglApiInterface
+from autotoggl.util import midnight
 
-from local_settings import TEST_WORKSPACE, TEST_WORKSPACE_ID, TEST_API_KEY
+from autotoggl.render import render_events
 
-from render import render_events
+from tests.test_credentials import (
+    TEST_WORKSPACE,
+    TEST_WORKSPACE_ID,
+    TEST_API_KEY,
+)
 
 
 def _init_logger(name=__file__, level=logging.DEBUG):
@@ -33,6 +38,7 @@ def _init_logger(name=__file__, level=logging.DEBUG):
 
 logger = _init_logger()
 autotoggl.logger = logger
+autotoggl.BASE_DIR = os.path.expanduser('~/autotoggl/test/')
 
 
 def _equal(actual, expected, data=None):
@@ -51,6 +57,7 @@ def _equal(actual, expected, data=None):
 
 
 class Bunch(object):
+    '''Dictionary wrapper'''
     def __init__(self, adict):
         self.__dict__.update(adict)
 
@@ -130,7 +137,56 @@ def generate_events(howmany=15):
     return events
 
 
-def test_calculate_event_durations(events, config):
+def _get_test_config():
+    return Config(json_data={
+        'api_key': TEST_API_KEY,
+        'default_workspace': TEST_WORKSPACE,
+        'default_day': 'today',
+        'minimum_event_seconds': 60,
+        'day_ends_at': 3,
+        'project_definitions': [
+            {
+                'process': 'sublime_text',
+                'project_pattern': '.*\\((.*?)\\) - Sublime Text.*',
+                'description_pattern': '(.*?) . \\(.*?\\) - Sublime Text.*'
+            },
+            {
+                'process': 'studio64',
+                'project_pattern': '(.*?) - \\[.*\\].*',
+                'description_pattern': '.*? - \\[.*?\\] - (.*?) - .*'
+            },
+            {
+                'process': 'chrome',
+                'projects': [
+                    {
+                        'title': 'Duolingo',
+                        'window_contains': [
+                            'duolingo',
+                        ]
+                    },
+                    {
+                        'title': 'Passive',
+                        'window_contains': [
+                            'guardian'
+                            'netflix'
+                            'news',
+                            'politics',
+                            'reddit',
+                            'starcraft',
+                        ]
+                    },
+                ]
+            },
+        ]
+    })
+
+
+def test_calculate_event_durations(events=None, config=None):
+    if not config:
+        config = _get_test_config()
+    if not events:
+        events = [Event(**x) for x in EVENTS]
+
     events = calculate_event_durations(events, config)
     for e in events:
         categorise_event(e, config.defs())
@@ -154,7 +210,8 @@ def test_calculate_event_durations(events, config):
     render_events(events)
 
 
-def test_project_definitions(config):
+def test_project_definitions(config=None):
+    config = _get_test_config()
     _equal(categorise_event(Event(**{
             'title': 'Duolingo',
             'process': 'chrome'
@@ -181,43 +238,44 @@ def test_project_definitions(config):
     _equal(event.description, 'File.java')
 
 
-def test_api_interface(config):
+def test_api_interface(config=None):
+    config = _get_test_config()
     interface = TogglApiInterface(config)
     # j = interface.get_workspaces()
     # logger.info(json.dumps(j, indent=2))
-    test_api_get_projects(interface)
+    # test_api_get_projects(interface)
     # pid = test_api_create_project(interface)
     # test_api_create_time_entry(interface, pid)
     # test_api_delete_project(interface, pid)
     logger.info(interface)
 
 
-def test_api_get_projects(interface):
-    j = interface.get_all_projects()
+# def test_api_get_projects(interface):
+#     j = interface.get_all_projects()
 
 
-def test_api_create_project(interface):
-    j = interface.create_project('API_TEST_PROJECT', TEST_WORKSPACE_ID)
-    _equal(j['data']['wid'], TEST_WORKSPACE_ID)
+# def test_api_create_project(interface):
+#     j = interface.create_project('API_TEST_PROJECT', TEST_WORKSPACE_ID)
+#     _equal(j['data']['wid'], TEST_WORKSPACE_ID)
 
-    pid = j['data']['id']
-    return pid
-
-
-def test_api_create_time_entry(interface, pid):
-    j = interface.create_time_entry(
-        pid,
-        (datetime.datetime.now(timezone.utc).astimezone() - timedelta(hours=1))
-        .replace(microsecond=0).isoformat(),
-        120
-    )
-    logger.debug('Time entry response: {}'.format(j))
+#     pid = j['data']['id']
+#     return pid
 
 
-def test_api_delete_project(interface, pid):
-    sleep(10)
-    deleted = interface.delete_project(pid)
-    _equal(deleted, True)
+# def test_api_create_time_entry(interface, pid):
+#     j = interface.create_time_entry(
+#         pid,
+#         (datetime.datetime.now(timezone.utc).astimezone() - timedelta(hours=1))
+#         .replace(microsecond=0).isoformat(),
+#         120
+#     )
+#     logger.debug('Time entry response: {}'.format(j))
+
+
+# def test_api_delete_project(interface, pid):
+#     sleep(10)
+#     deleted = interface.delete_project(pid)
+#     _equal(deleted, True)
 
 
 def test_config():

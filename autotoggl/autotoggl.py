@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import sqlite3
@@ -6,8 +5,8 @@ import time
 
 from datetime import timedelta
 
-from config import Config
-from toggl_api import TogglApiInterface, ApiError
+from autotoggl.config import Config
+from autotoggl.toggl_api import TogglApiInterface, ApiError
 
 BASE_DIR = os.path.expanduser('~/autotoggl/')
 DB_NAME = os.path.join(BASE_DIR, 'toggl.db')
