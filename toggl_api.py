@@ -30,10 +30,10 @@ class ApiError(Exception):
 
 class TogglApiInterface:
     def __init__(self, config):
-        self.default_workspace = config.get('default_workspace')
+        self.default_workspace = config.default_workspace
 
         self.api_token = b64encode(
-            (config['api_key'] + ':api_token').encode()).decode()
+            (config.api_key + ':api_token').encode()).decode()
 
         self.headers = {
             'Authorization': 'Basic ' + self.api_token,
@@ -70,17 +70,27 @@ class TogglApiInterface:
         '''
         Try to get an integer workspace id.
         '''
-        if not self.default_workspace:
-            return
+        # if not self.default_workspace:
+        #     return
 
         if type(self.default_workspace) is int:
             return
 
         if self.cached:
-            for _, w in self.cached.items():
-                if w.get('name', '') == self.default_workspace:
-                    self.default_workspace = w.get('id')
+            if self.default_workspace:
+                # Try to get an ID for the given workspace name
+                for _, w in self.cached.items():
+                    if w.get('name', '') == self.default_workspace:
+                        self.default_workspace = w.get('id')
+                        return
+            else:
+                # If there is only one workspace then set it as the default
+                if len(self.cached) == 1:
+                    self.default_workpace = next(iter(self.cached)).get('id')
                     return
+        logger.warn(
+            'Unable to set default workspace - '
+            'please check your configuration')
 
     def get_workspaces(self):
         '''

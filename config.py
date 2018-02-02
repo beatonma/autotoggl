@@ -5,6 +5,8 @@ import re
 from argparse import ArgumentParser
 from datetime import datetime, timedelta
 
+from util import midnight
+
 
 class InvalidConfig(Exception):
     '''
@@ -21,13 +23,27 @@ class ConfigError(Exception):
 
 
 class Config:
-    def __init__(self, file):
+    def __init__(self, file=None, json_data=None, clargs=None):
         self.filepath = file
 
-        self._load_from_file(file)
-        self._load_from_clargs()
+        self.api_key = None
+        self.default_workspace = None
+        self.project_definitions = {}
+        self.default_day = None
+        self.minimum_event_seconds = None
+        self.day_ends_at = None
+        self.date = None
+
+        if file:
+            self._load_from_file(file)
+        elif json_data:
+            self._load_from_json(json_data)
+        self._load_from_clargs(clargs)
         self._process_args()
         self._validate_config()
+
+    def defs(self):
+        return self.project_definitions
 
     def _load_from_file(self, filename):
         if not os.path.exists(filename):
@@ -38,9 +54,9 @@ class Config:
             try:
                 config = json.load(f)
                 self._load_from_json(config)
-            except:
+            except Exception as e:
                 raise ConfigError(
-                    'Error reading JSON from file {}'.format(filename))
+                    'Error reading JSON from file {}: {}'.format(filename, e))
 
     def _load_from_json(self, config):
         defs = {}
@@ -66,45 +82,47 @@ class Config:
         # Useful if you tend to stay up into the wee hours
         self.day_ends_at = config.get('day_ends_at', 3)
 
-    def _load_from_clargs(self):
-        parser = ArgumentParser()
-        parser.add_argument(
-            'day',
-            choices=[
-                'today',
-                'yesterday',
-            ],
-            default='',
-            nargs='?',
-        )
+    def _load_from_clargs(self, args=None):
+        if not args:
+            parser = ArgumentParser()
+            parser.add_argument(
+                'day',
+                choices=[
+                    'today',
+                    'yesterday',
+                    '',
+                ],
+                default='',
+                nargs='?',
+            )
 
-        parser.add_argument(
-            '--date',
-            type=str,
-            default=None,
-            help='(yy)yy-mm-dd format',
-        )
+            parser.add_argument(
+                '--date',
+                type=str,
+                default=None,
+                help='(yy)yy-mm-dd format',
+            )
 
-        parser.add_argument(
-            '--default_workspace',
-            help='The workspace on which any new projects should be created.',)
+            parser.add_argument(
+                '--default_workspace',
+                help='The workspace on which any new projects should be created.',)
 
-        parser.add_argument(
-            '--key',
-            type=str,
-            help='Toggl API key')
+            parser.add_argument(
+                '--key',
+                type=str,
+                help='Toggl API key')
 
-        parser.add_argument(
-            '--minimum_event_seconds',
-            type=int,
-            help='Ignore any events that are shorter than this.',)
+            parser.add_argument(
+                '--minimum_event_seconds',
+                type=int,
+                help='Ignore any events that are shorter than this.',)
 
-        parser.add_argument(
-            '--day_ends_at',
-            type=int,
-            help='Hour at which one day rolls over into the next.',)
+            parser.add_argument(
+                '--day_ends_at',
+                type=int,
+                help='Hour at which one day rolls over into the next.',)
 
-        args = parser.parse_args()
+            args = parser.parse_args()
 
         if args.day:
             self.default_day = args.day
@@ -133,6 +151,7 @@ class Config:
                 self.date = datetime.today()
             elif self.default_day == 'yesterday':
                 self.date = datetime.today() - timedelta(days=1)
+        self.date = midnight(self.date)
 
         if self.default_workspace:
             # Try to parse given workspace as an integer ID

@@ -1,13 +1,14 @@
 import json
 import logging
 import os
-import re
+# import re
 import sqlite3
 import time
 
-from argparse import ArgumentParser
-from datetime import datetime, timedelta
+# from argparse import ArgumentParser
+from datetime import timedelta
 
+from config import Config
 from toggl_api import TogglApiInterface, ApiError
 
 BASE_DIR = os.path.expanduser('~/autotoggl/')
@@ -21,11 +22,11 @@ EVENT_SYSTEM = '__SYS__'
 # 3am - Use this time as 'midnight'.
 # Any events recorded between midnight and this hour will be grouped
 # with the date of the previous calendar day
-DAY_ENDS_AT = 3
+# DAY_ENDS_AT = 3
 
-DEFAULT_DAY = datetime.today() - timedelta(days=1)  # yesterday
+# DEFAULT_DAY = datetime.today() - timedelta(days=1)  # yesterday
 
-MINIMUM_EVENT_LENGTH_SECONDS = 60
+# MINIMUM_EVENT_LENGTH_SECONDS = 60
 
 
 def _init_logger(name=__file__, level=logging.DEBUG):
@@ -36,41 +37,6 @@ def _init_logger(name=__file__, level=logging.DEBUG):
 
 
 logger = _init_logger()
-
-
-def _parse_args():
-    parser = ArgumentParser()
-    parser.add_argument(
-        'day',
-        choices=[
-            'today',
-            'yesterday',
-        ],
-        default='yesterday',
-        nargs='?'
-    )
-    parser.add_argument(
-        '--date',
-        type=str,
-        default=None,
-        help='(yy)yy-mm-dd format'
-    )
-
-    args = parser.parse_args()
-    if args.date:
-        m = re.match(r'(\d{2})?(\d{2})-(\d{2})-(\d{2})', args.date)
-        if m:
-            args.date = datetime(
-                year=int('{}{}'.format(m.group(1) or '20', m.group(2))),
-                month=int(m.group(3)),
-                day=int(m.group(4)))
-    else:
-        if args.day == 'today':
-            args.date = datetime.today()
-        elif args.day == 'yesterday':
-            args.date = datetime.today() - timedelta(days=1)
-
-    return args
 
 
 class DbConnection:
@@ -98,69 +64,13 @@ class DbConnection:
         pass
 
 
-class ProcessClassifier:
-    def __init__(self, json_data=None):
-        if json:
-            self._from_json(json_data)
-        else:
-            self.process = ''
-
-    def _from_json(self, j):
-        self.process = j.get('process')
-        self.project_pattern = j.get('project_pattern')
-        self.projects = j.get('projects')
-
-    def get_project(self, window_title):
-        project = None
-
-        if self.project_pattern:
-            m = re.match(self.project_pattern, window_title)
-            if m:
-                project = m.group(1)
-                return project
-        if self.projects:
-            for p in self.projects:
-                if [x for x in p.get('window_contains')
-                        if x in window_title.lower()]:
-                    return p.get('title')
-
-    def __repr__(self):
-        return json.dumps({
-                'process': self.process,
-                'project_pattern': self.project_pattern,
-                'projects': self.projects,
-            }, indent=2)
-
-
 def load_config():
-    if not os.path.exists(CONFIG_FILE):
-        return {}
-
-    config = None
-
-    with open(CONFIG_FILE, 'r') as f:
-        config = json.load(f)
-
-    if not config:
-        return {}
-
-    defs = {}
-    for x in config.get('project_definitions', []):
-        defs[x['process']] = ProcessClassifier(x)
-
-    del config['project_definitions']
-
-    if 'api_key' not in config:
-        logger.warn('API key is not configured')
-    if not defs:
-        logger.warn('No project definitions are configured')
-
-    return config, defs
+    return Config(CONFIG_FILE)
 
 
-def get_events_for_date(db, date):
+def get_events_for_date(db, date, config):
     date_starts = date.replace(
-        hour=DAY_ENDS_AT, minute=0, second=0, microsecond=0)
+        hour=config.day_ends_at, minute=0, second=0, microsecond=0)
     date_ends = date_starts + timedelta(days=1)
     logger.info(
         'Getting events between {} and {}'.format(date_starts, date_ends))
@@ -190,13 +100,14 @@ def categorise_event(event, definitions):
     process = event.get('process')
     title = event.get('title')
 
-    if definitions:
-        process_classifier = definitions.get(process, None)
-        if process_classifier:
-            project = process_classifier.get_project(title)
-            if project:
-                event['project'] = project
-                return project
+    process_classifier = definitions.get(process, None)
+    if process_classifier:
+        project = process_classifier.get_project(title)
+        event['description'] = process_classifier.get_description(title)
+
+        if project:
+            event['project'] = project
+            return project
 
     return None
 
@@ -210,7 +121,7 @@ def categorise_events(events, definitions):
     '''
     projects = {}
     for x in events:
-        project = categorise_event(x, project_definitions)
+        project = categorise_event(x, definitions)
         if not project:
             continue
 
@@ -225,7 +136,7 @@ def categorise_events(events, definitions):
     return events, projects
 
 
-def calculate_event_durations(events):
+def calculate_event_durations(events, config):
     '''
     Remove events that are very short.
     '''
@@ -239,7 +150,7 @@ def calculate_event_durations(events):
     # Calculate complete durations by weeding out short events
     # and taking system events into account
     for n, e in enumerate(events):
-        if (e['duration'] < MINIMUM_EVENT_LENGTH_SECONDS
+        if (e['duration'] < config.minimum_event_seconds
                 or e['title'] == EVENT_SYSTEM):
             e['duration'] = 0
             continue
@@ -249,7 +160,7 @@ def calculate_event_durations(events):
                 o['duration'] = 0
                 break
 
-            if o['duration'] < MINIMUM_EVENT_LENGTH_SECONDS:
+            if o['duration'] < config.minimum_event_seconds:
                 e['duration'] += o['duration']
                 o['duration'] = 0
             elif e['title'] == o['title']:
@@ -312,14 +223,13 @@ def consume(db, events):
 
 
 if __name__ == '__main__':
-    args = _parse_args()
     db = DbConnection()
-    config, project_definitions = load_config()
+    config = load_config()
 
-    events = get_events_for_date(db, args.date)
+    events = get_events_for_date(db, config.date)
     events = calculate_event_durations(events)
 
-    events, projects = categorise_events(events, project_definitions)
+    events, projects = categorise_events(events, config.project_definitions)
 
     if not events:
         logger.debug('No events')

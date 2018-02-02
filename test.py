@@ -14,9 +14,11 @@ from autotoggl import (
     load_config,
     submit,
 )
+from config import Config
 from toggl_api import TogglApiInterface
+from util import midnight
 
-from local_settings import TEST_WORKSPACE_ID
+from local_settings import TEST_WORKSPACE_ID, TEST_API_KEY
 
 from render import render_events
 
@@ -45,6 +47,11 @@ def _equal(actual, expected, data=None):
             except:
                 logger.warn('  Data: {}'.format(data))
         raise SystemExit()
+
+
+class Bunch(object):
+    def __init__(self, adict):
+        self.__dict__.update(adict)
 
 
 EVENTS = [
@@ -77,7 +84,6 @@ EVENTS = [
 
 
 def generate_events(howmany=15):
-    MAX_EVENT_DURATION = 60 * 60  # 1hr
     EVENT_TYPES = [
         ('sublime_text', '/auto-toggl/main.py (auto-toggl) - Sublime Text'),
         ('sublime_text', '/gdbackup/gdbackup.py (gdbackup) - Sublime Text'),
@@ -123,13 +129,20 @@ def generate_events(howmany=15):
     return events
 
 
-def test_calculate_event_durations(events):
-    config, defs = load_config()
-    events = calculate_event_durations(events)
+def test_calculate_event_durations(events, config):
+    # config = load_config()
+    events = calculate_event_durations(events, config)
     for e in events:
-        categorise_event(e, defs)
+        categorise_event(e, config.defs())
 
-    EXPECTED_VALUES = [{'duration': 155, 'title': 'StarCraft on Reddit', 'process': 'chrome', 'start': '10:22:00'}, {'duration': 5510, 'title': 'LEDControl - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': '10:25:05'}, {'duration': 1890, 'title': '/gdbackup/gdbackup.py (gdbackup) - Sublime Text', 'process': 'sublime_text', 'start': '11:56:55'}, {'duration': 5410, 'title': 'Commons - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': '12:30:55'}, {'duration': 125, 'title': 'LEDControl - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': '14:01:05'}, {'duration': 95, 'title': '/gdbackup/gdbackup.py (gdbackup) - Sublime Text', 'process': 'sublime_text', 'start': '14:04:30'}, {'duration': 120, 'title': 'Politics', 'process': 'chrome', 'start': '15:36:05'}, ]
+    EXPECTED_VALUES = [
+    {'duration': 155, 'title': 'StarCraft on Reddit', 'process': 'chrome', 'start': '10:22:00'},
+    {'duration': 5510, 'title': 'LEDControl - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': '10:25:05'},
+    {'duration': 1890, 'title': '/gdbackup/gdbackup.py (gdbackup) - Sublime Text', 'process': 'sublime_text', 'start': '11:56:55'},
+    {'duration': 5410, 'title': 'Commons - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': '12:30:55'},
+    {'duration': 125, 'title': 'LEDControl - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': '14:01:05'},
+    {'duration': 95, 'title': '/gdbackup/gdbackup.py (gdbackup) - Sublime Text', 'process': 'sublime_text', 'start': '14:04:30'},
+    {'duration': 120, 'title': 'Politics', 'process': 'chrome', 'start': '15:36:05'}, ]
 
     _equal(len(events), len(EXPECTED_VALUES), data=events)
 
@@ -141,28 +154,34 @@ def test_calculate_event_durations(events):
     render_events(events)
 
 
-def test_project_definitions():
-    _, defs = load_config()
-
+def test_project_definitions(config):
     _equal(categorise_event({
             'title': 'Duolingo',
             'process': 'chrome'
-        }, defs), 'Duolingo')
+        }, config.defs()), 'Duolingo')
 
     _equal(categorise_event({
             'title': '/auto-toggl/main.py (auto-toggl) - Sublime Text',
             'process': 'sublime_text'
-        }, defs), 'auto-toggl')
+        }, config.defs()), 'auto-toggl')
 
     _equal(categorise_event({
             'title': 'LEDControl - [/path/to/proj] - File.java - Android Studio 3.0',
             'process': 'studio64'
-        }, defs), 'LEDControl')
+        }, config.defs()), 'LEDControl')
+
+    # Confirm that categorise_event correctly parses project and description
+    # and adds those data to the original event object
+    event = {
+        'title': 'LEDControl - [/path/to/proj] - File.java - Android Studio 3.0',
+        'process': 'studio64'
+    }
+    categorise_event(event, config.defs())
+    _equal(event['project'], 'LEDControl')
+    _equal(event['description'], 'File.java')
 
 
-def test_api_interface():
-    config, _ = load_config()
-
+def test_api_interface(config):
     interface = TogglApiInterface(config)
     # j = interface.get_workspaces()
     # logger.info(json.dumps(j, indent=2))
@@ -205,8 +224,92 @@ def test_api_delete_project(interface, pid):
     _equal(deleted, True)
 
 
+def test_config():
+    file_config = {
+        'api_key': TEST_API_KEY,
+        'default_workspace': 'Default workspace',
+        'default_day': 'today',
+        'minimum_event_seconds': 60,
+        'day_ends_at': 3,
+        'project_definitions': [
+            {
+                'process': 'sublime_text',
+                'project_pattern': '.*\\((.*?)\\) - Sublime Text.*',
+                'description_pattern': '(.*?) . \\(.*?\\) - Sublime Text.*'
+            },
+            {
+                'process': 'studio64',
+                'project_pattern': '(.*?) - \\[.*\\].*',
+                'description_pattern': '.*? - \\[.*?\\] - (.*?) - .*'
+            },
+            {
+                'process': 'chrome',
+                'projects': [
+                    {
+                        'title': 'Duolingo',
+                        'window_contains': [
+                            'duolingo',
+                        ]
+                    },
+                    {
+                        'title': 'Passive',
+                        'window_contains': [
+                            'guardian'
+                            'netflix'
+                            'news',
+                            'politics',
+                            'reddit',
+                            'starcraft',
+                        ]
+                    },
+                ]
+            },
+        ]
+    }
+
+    config = Config(json_data=file_config)
+    _equal(midnight(config.date), midnight(datetime.datetime.today()))
+
+    file_config.update(default_day='yesterday')
+    config = Config(json_data=file_config)
+    _equal(config.date,
+           midnight(datetime.datetime.today() - timedelta(days=1)))
+
+    # Test integer workspace ID is read as an integer
+    file_config.update(default_workspace='20')
+    config = Config(json_data=file_config)
+    _equal(config.default_workspace, 20)
+
+    clargs = {
+        'key': TEST_API_KEY,
+        'default_workspace': 'Default workspace',
+        'minimum_event_seconds': 60,
+        'day_ends_at': 3,
+        'day': 'yesterday',
+        'date': '15-10-02'
+    }
+    # Test parsing of date with partial year
+    config = Config(json_data=file_config, clargs=Bunch(clargs))
+    _equal(config.date, datetime.datetime(2015, 10, 2))
+
+    # Test parsing of date with full year
+    clargs.update(date='2015-10-03')
+    config = Config(json_data=file_config, clargs=Bunch(clargs))
+    _equal(config.date, datetime.datetime(2015, 10, 3))
+
+    return config
+
+
 if __name__ == '__main__':
-    test_api_interface()
-    # test_project_definitions()
-    test_calculate_event_durations(EVENTS)
+    logger.info('test_config...')
+    config = test_config()
+    logger.info('test_project_definitions...')
+    test_project_definitions(config)
+    logger.info('test_calculate_event_durations...')
+    test_calculate_event_durations(EVENTS, config)
+
+    # logger.info('test_api_interface...')
+    # test_api_interface(config)
+
+    logger.info('')
     logger.info('Tests complete!')
