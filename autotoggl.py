@@ -1,11 +1,9 @@
 import json
 import logging
 import os
-# import re
 import sqlite3
 import time
 
-# from argparse import ArgumentParser
 from datetime import timedelta
 
 from config import Config
@@ -18,15 +16,6 @@ CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
 # Special event name indicating that system status has changed
 # Triggered by events such as user idle, system lock
 EVENT_SYSTEM = '__SYS__'
-
-# 3am - Use this time as 'midnight'.
-# Any events recorded between midnight and this hour will be grouped
-# with the date of the previous calendar day
-# DAY_ENDS_AT = 3
-
-# DEFAULT_DAY = datetime.today() - timedelta(days=1)  # yesterday
-
-# MINIMUM_EVENT_LENGTH_SECONDS = 60
 
 
 def _init_logger(name=__file__, level=logging.DEBUG):
@@ -60,8 +49,36 @@ class DbConnection:
     def exec(self, *args):
         return self.cursor.execute(*args)
 
-    def clean_up(consumed_only=True, older_than=timedelta(days=2)):
+    def clean_up(self, consumed_only=True, older_than=timedelta(days=2)):
         pass
+
+    def consume(self, events):
+        '''
+        Mark the given events (and any events merged with them) as consumed,
+        meaning they have been submitted to Toggl successfully
+        '''
+        ids = [e.merged + [e.id] for e in events if e.consumed]
+        sql = '''UPDATE toggl SET consumed=? WHERE rowid=?'''
+        for rowid in ids:
+            self.exec(sql, (True, rowid))
+
+
+class Event:
+    def __init__(self, **kwargs):
+        self.id = kwargs.get('id')
+        self.process = kwargs.get('process')
+        self.title = kwargs.get('title')
+        self.start = kwargs.get('start')
+        self.consumed = kwargs.get('consumed', False)
+
+        self.duration = kwargs.get('duration', 0)
+
+        self.merged = []
+
+    def merge(self, other):
+        self.duration += other.duration
+        other.duration = 0
+        self.merged.append(other.id)
 
 
 def load_config():
@@ -78,35 +95,34 @@ def get_events_for_date(db, date, config):
     date_starts = date_starts.timestamp()
     date_ends = date_ends.timestamp()
 
-    c = db.exec('''SELECT process_name, window_title, start, consumed, rowid
+    c = db.exec('''SELECT rowid, process_name, window_title, start, consumed
                    FROM toggl
                    WHERE start>=? AND start<=?''',
                 (date_starts, date_ends))
     return [
-        {
-            'process': r[0],
-            'title': r[1],
-            'start': r[2],
-            'consumed': bool(r[3]),
-            'duration': 0,
-            'id': r[4]
-        } for r in c.fetchall()]
+        Event(
+            id=r[0],
+            process=r[1],
+            title=r[2],
+            start=r[3],
+            consumed=bool(r[4]),
+        ) for r in c.fetchall()]
 
 
 def categorise_event(event, definitions):
     '''
     If we recognise the window title, try to parse a project name from it
     '''
-    process = event.get('process')
-    title = event.get('title')
+    process = event.process
+    title = event.title
 
     process_classifier = definitions.get(process, None)
     if process_classifier:
         project = process_classifier.get_project(title)
-        event['description'] = process_classifier.get_description(title)
+        event.description = process_classifier.get_description(title)
 
         if project:
-            event['project'] = project
+            event.project = project
             return project
 
     return None
@@ -131,7 +147,7 @@ def categorise_events(events, definitions):
             projects[project] = [x]
 
     # Remove events that are not assigned to any projects
-    events = list(filter(lambda x: 'project' in x, events))
+    events = list(filter(lambda x: x.project, events))
 
     return events, projects
 
@@ -141,43 +157,43 @@ def calculate_event_durations(events, config):
     Remove events that are very short.
     '''
     # Ensure events are in order of occurrence
-    events.sort(key=lambda x: x['start'])
+    events.sort(key=lambda x: x.start)
 
     # Calculate naive durations by going through the events pairwise
     for a, b in zip(events[:-1], events[1:]):
-        a['duration'] = b['start'] - a['start']
+        a.duration = b.start - a.start
 
     # Calculate complete durations by weeding out short events
     # and taking system events into account
     for n, e in enumerate(events):
-        if (e['duration'] < config.minimum_event_seconds
-                or e['title'] == EVENT_SYSTEM):
-            e['duration'] = 0
+        if (e.duration < config.minimum_event_seconds
+                or e.title == EVENT_SYSTEM):
+            e.duration = 0
             continue
 
         for o in events[n+1:]:
-            if o['title'] == EVENT_SYSTEM:
-                o['duration'] = 0
+            if o.title == EVENT_SYSTEM:
+                o.duration = 0
                 break
 
-            if o['duration'] < config.minimum_event_seconds:
-                e['duration'] += o['duration']
-                o['duration'] = 0
-            elif e['title'] == o['title']:
+            if o.duration < config.minimum_event_seconds:
+                e.merge(o)
+            elif e.title == o.title:
                 # If consecutive events have the same name then
                 # squash them into the first occurrence
-                e['duration'] += o['duration']
-                o['duration'] = 0
+                e.merge(o)
             else:
                 # Another event long enough to take over
                 break
 
     # Remove any event with 0 duration
-    return list(filter(lambda x: x['duration'], events))
+    return list(filter(lambda x: x.duration, events))
 
 
-def submit(interface, projects, db):
+def submit(interface, projects):
     interface.get_all_projects()
+    successful = []
+    failed = []
     for p, events in projects.items():
         if p not in interface.projects:
             logger.debug('Creating project \'{}\''.format(p))
@@ -186,40 +202,23 @@ def submit(interface, projects, db):
             except ApiError as e:
                 logger.warn(e)
 
-        consumed = []
-
         for e in events:
-            if e['consumed']:
+            if e.consumed:
                 continue
 
             try:
                 interface.create_time_entry(
-                    e['project'],
-                    e['start'],
-                    e['duration'],)
-                e['consumed'] = True
-                consumed.append(e)
-            except ApiError as e:
-                logger.warn(e)
+                    e.project,
+                    e.start,
+                    e.duration,)
+                e.consumed = True
+                successful.append(e)
+            except ApiError as err:
+                failed.append(e)
+                logger.warn(err)
             time.sleep(1)
 
-        consume(db, consumed)
-
-
-def consume(db, events):
-    '''
-    mark events as consumed once they have been submitted successfully
-    '''
-
-    n = 0
-    for e in events:
-        if e['consumed']:
-            sql = '''
-            UPDATE toggl SET consumed=? WHERE rowid=?
-            '''
-            db.exec(sql, (True, e['id'],))
-            n += 1
-    logger.debug('Consumed {} events'.format(n))
+    return successful, failed
 
 
 if __name__ == '__main__':
@@ -235,15 +234,12 @@ if __name__ == '__main__':
         logger.debug('No events')
         raise SystemExit()
 
-    # logger.info('Today:')
-    # for key, value in projects.items():
-    #     logger.info('  {}: {}'.format(key, len(value)))
-
-    logger.info(json.dumps(projects, indent=2))
-
-    logger.info('{} projects'.format(len(projects)))
-
     api = TogglApiInterface(config)
-    submit(api, projects, db)
+    successful, failed = submit(api, projects)
+
+    db.consume(successful)
+
+    if failed:
+        logger.warn('{} events failed to be submitted'.format(len(failed)))
 
     db.close()
