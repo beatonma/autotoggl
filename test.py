@@ -8,6 +8,7 @@ from time import sleep
 
 import autotoggl
 from autotoggl import (
+    Event,
     categorise_event,
     categorise_events,
     calculate_event_durations,
@@ -18,7 +19,7 @@ from config import Config
 from toggl_api import TogglApiInterface
 from util import midnight
 
-from local_settings import TEST_WORKSPACE_ID, TEST_API_KEY
+from local_settings import TEST_WORKSPACE, TEST_WORKSPACE_ID, TEST_API_KEY
 
 from render import render_events
 
@@ -130,7 +131,6 @@ def generate_events(howmany=15):
 
 
 def test_calculate_event_durations(events, config):
-    # config = load_config()
     events = calculate_event_durations(events, config)
     for e in events:
         categorise_event(e, config.defs())
@@ -147,38 +147,38 @@ def test_calculate_event_durations(events, config):
     _equal(len(events), len(EXPECTED_VALUES), data=events)
 
     for x, y in zip(events, EXPECTED_VALUES):
-        _equal(int(x['duration']), int(y['duration']), data=[x, y])
-        _equal(x['process'], y['process'], data=[x, y])
-        _equal(x['title'], y['title'], data=[x, y])
+        _equal(int(x.duration), int(y['duration']), data=[x, y])
+        _equal(x.process, y['process'], data=[x, y])
+        _equal(x.title, y['title'], data=[x, y])
 
     render_events(events)
 
 
 def test_project_definitions(config):
-    _equal(categorise_event({
+    _equal(categorise_event(Event(**{
             'title': 'Duolingo',
             'process': 'chrome'
-        }, config.defs()), 'Duolingo')
+        }), config.defs()), 'Duolingo')
 
-    _equal(categorise_event({
+    _equal(categorise_event(Event(**{
             'title': '/auto-toggl/main.py (auto-toggl) - Sublime Text',
             'process': 'sublime_text'
-        }, config.defs()), 'auto-toggl')
+        }), config.defs()), 'auto-toggl')
 
-    _equal(categorise_event({
+    _equal(categorise_event(Event(**{
             'title': 'LEDControl - [/path/to/proj] - File.java - Android Studio 3.0',
             'process': 'studio64'
-        }, config.defs()), 'LEDControl')
+        }), config.defs()), 'LEDControl')
 
     # Confirm that categorise_event correctly parses project and description
     # and adds those data to the original event object
-    event = {
+    event = Event(**{
         'title': 'LEDControl - [/path/to/proj] - File.java - Android Studio 3.0',
         'process': 'studio64'
-    }
+    })
     categorise_event(event, config.defs())
-    _equal(event['project'], 'LEDControl')
-    _equal(event['description'], 'File.java')
+    _equal(event.project, 'LEDControl')
+    _equal(event.description, 'File.java')
 
 
 def test_api_interface(config):
@@ -190,10 +190,6 @@ def test_api_interface(config):
     # test_api_create_time_entry(interface, pid)
     # test_api_delete_project(interface, pid)
     logger.info(interface)
-
-    # logger.info(
-    #     'Cache: {}'.format(
-    #         json.dumps(interface.cached, indent=2, sort_keys=True)))
 
 
 def test_api_get_projects(interface):
@@ -227,7 +223,7 @@ def test_api_delete_project(interface, pid):
 def test_config():
     file_config = {
         'api_key': TEST_API_KEY,
-        'default_workspace': 'Default workspace',
+        'default_workspace': TEST_WORKSPACE,
         'default_day': 'today',
         'minimum_event_seconds': 60,
         'day_ends_at': 3,
@@ -282,7 +278,7 @@ def test_config():
 
     clargs = {
         'key': TEST_API_KEY,
-        'default_workspace': 'Default workspace',
+        'default_workspace': TEST_WORKSPACE,
         'minimum_event_seconds': 60,
         'day_ends_at': 3,
         'day': 'yesterday',
@@ -306,7 +302,7 @@ if __name__ == '__main__':
     logger.info('test_project_definitions...')
     test_project_definitions(config)
     logger.info('test_calculate_event_durations...')
-    test_calculate_event_durations(EVENTS, config)
+    test_calculate_event_durations([Event(**x) for x in EVENTS], config)
 
     # logger.info('test_api_interface...')
     # test_api_interface(config)
