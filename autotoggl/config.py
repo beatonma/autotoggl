@@ -33,11 +33,14 @@ class Config:
         self.minimum_event_seconds = None
         self.day_ends_at = None
         self.date = None
+        self.local = False
+        self.render = False
 
         if file:
             self._load_from_file(file)
         elif json_data:
             self._load_from_json(json_data)
+
         self._load_from_clargs(clargs)
         self._process_args()
         self._validate_config()
@@ -122,6 +125,18 @@ class Config:
                 type=int,
                 help='Hour at which one day rolls over into the next.',)
 
+            parser.add_argument(
+                '-local',
+                action='store_true',
+                default=False,
+                help='Do a \'dry run\' without sending anything to Toggl',)
+
+            parser.add_argument(
+                '-render',
+                action='store_true',
+                default=False,
+                help='Contruct a simple HTML preview of event data',)
+
             args = parser.parse_args()
 
         if args.day:
@@ -137,15 +152,23 @@ class Config:
         if args.day_ends_at:
             self.day_ends_at = args.day_ends_at
 
+        self.local = args.local
+        self.render = args.render
+
     def _process_args(self):
         if self.date:
-            m = re.match(r'(\d{2})?(\d{2})-(\d{2})-(\d{2})', self.date)
+            m = re.match(
+                r'(\d{2})?(\d{2})'  # year
+                '[./\-]{1}'         # separator
+                '(\d{2})'           # month
+                '[./\-]{1}'         # separator
+                '(\d{2})',          # day
+                self.date)
             if m:
                 self.date = datetime(
                     year=int('{}{}'.format(m.group(1) or '20', m.group(2))),
                     month=int(m.group(3)),
                     day=int(m.group(4)))
-
         else:
             if self.default_day == 'today':
                 self.date = datetime.today()
@@ -156,14 +179,31 @@ class Config:
         if self.default_workspace:
             # Try to parse given workspace as an integer ID
             try:
-                as_int = int(self.default_workspace)
-                self.default_workspace = as_int
+                self.default_workspace = int(self.default_workspace)
             except:
                 pass
 
     def _validate_config(self):
         if not self.api_key:
             raise InvalidConfig('API key is not configured')
+
+        if not self.date or type(self.date) != datetime:
+            raise InvalidConfig('Date could not be interpreted')
+
+    def as_json(self):
+        return {
+            'api_key': self.api_key,
+            'default_workspace': self.default_workspace,
+            'default_day': self.default_day,
+            'minimum_event_seconds': self.minimum_event_seconds,
+            'day_ends_at': self.day_ends_at,
+            'date': int(self.date.timestamp()),
+            'project_definitions': [
+                x.as_json() for _, x in self.project_definitions.items()
+            ],
+            'local': self.local,
+            'render': self.render,
+        }
 
     def _create_example_file(self, filename):
         d = os.path.dirname(filename)
@@ -172,40 +212,43 @@ class Config:
 
         with open(filename, 'w') as f:
             json.dump({
-                "api_key": "Enter the API token from your profile at https://toggl.com/app/profile",
-                "default_workspace": "workspace name or id",
-                "default_day": "yesterday",
-                "minimum_event_seconds": 60,
-                "day_ends_at": 3,
-                "project_definitions": [
+                'api_key': 'Enter the API token from your profile at https://toggl.com/app/profile',
+                'default_workspace': 'workspace name or id',
+                'default_day': 'yesterday',
+                'minimum_event_seconds': 60,
+                'day_ends_at': 3,
+                'project_definitions': [
                     {
-                        "process": "sublime_text",
-                        "project_pattern": ".*\\((.*?)\\) - Sublime Text.*",
-                        "description_pattern": "(.*?) . \\(.*?\\) - Sublime Text.*"
+                        'process': 'sublime_text',
+                        'project_pattern': '.*\\((.*?)\\) - Sublime Text.*',
+                        'description_pattern': '(.*?) . \\(.*?\\) - Sublime Text.*'
                     },
                     {
-                        "process": "studio64",
-                        "project_pattern": "(.*?) - \\[.*\\].*",
-                        "description_pattern": ".*? - \\[.*?\\] - (.*?) - .*"
+                        'process': 'studio64',
+                        'project_pattern': '(.*?) - \\[.*\\].*',
+                        'description_pattern': '.*? - \\[.*?\\] - (.*?) - .*'
                     },
                     {
-                        "process": "chrome",
-                        "projects": [
+                        'process': 'chrome',
+                        'projects': [
                             {
-                                "title": "Duolingo",
-                                "window_contains": [
-                                    "duolingo"
+                                'title': 'Duolingo',
+                                'description': 'German',
+                                'window_contains': [
+                                    'duolingo'
                                 ]
                             },
                             {
-                                "title": "Passive",
-                                "window_contains": [
-                                    "reddit",
-                                    "politics",
-                                    "starcraft",
-                                    "news",
-                                    "guardian",
-                                    "netflix"
+                                'title': 'Casual',
+                                'description': 'Internetting',
+                                'description_pattern': '(.*)',
+                                'window_contains': [
+                                    'reddit',
+                                    'politics',
+                                    'starcraft',
+                                    'news',
+                                    'guardian',
+                                    'netflix'
                                 ]
                             }
                         ]
@@ -214,19 +257,17 @@ class Config:
             }, f)
 
 
-
-
 class ProcessClassifier:
-    def __init__(self, json_data=None):
-        if json:
-            self._from_json(json_data)
-        else:
-            self.process = ''
+    def __init__(self, json_data):
+        self._from_json(json_data)
 
     def _from_json(self, j):
         self.process = j.get('process')
-        self.project_pattern = j.get('project_pattern')
+
+        self.description = j.get('description')
         self.description_pattern = j.get('description_pattern')
+
+        self.project_pattern = j.get('project_pattern')
         self.projects = j.get('projects')
 
     def get_project(self, window_title):
@@ -240,7 +281,7 @@ class ProcessClassifier:
                         if x in window_title.lower()]:
                     return p.get('title')
 
-    def get_description(self, window_title):
+    def get_description(self, window_title, project=None):
         if self.description_pattern:
             m = re.match(self.description_pattern, window_title)
             if m:
@@ -252,3 +293,11 @@ class ProcessClassifier:
                 'project_pattern': self.project_pattern,
                 'projects': self.projects,
             }, indent=2)
+
+    def as_json(self):
+        return {
+            'process': self.process,
+            'project_pattern': self.project_pattern,
+            'description_pattern': self.description_pattern,
+            'projects': self.projects,
+        }
