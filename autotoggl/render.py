@@ -75,7 +75,7 @@ div{{
 {styles}
 </style>
 </head>
-<body><header>{start} -> {end}</header><div id="key">{key}</div><div id="hours">{hours}</div><div id="container">'''
+<body><header>{start} -> {end}<br/>{events} events</header><div id="key">{key}</div><div id="hours">{hours}</div><div id="container">'''
 
     html_end = '''
 </div>
@@ -129,6 +129,7 @@ function show(text){{
             html_start.format(
                 start=html.escape(datetime.fromtimestamp(start).isoformat()),
                 end=html.escape(datetime.fromtimestamp(end).isoformat()),
+                events=len(events),
                 styles=''.join(styles),
                 key=''.join(key),
                 hours=_hours(start, end)))
