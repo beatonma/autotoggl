@@ -3,6 +3,8 @@ import os
 import sqlite3
 import time
 
+import autotoggl.render
+
 from datetime import timedelta
 
 from autotoggl.config import Config
@@ -30,7 +32,7 @@ logger = _init_logger()
 class DbConnection:
     def __init__(self, filename=DB_NAME):
         if not os.path.exists(filename):
-            raise Exception('Database does not exist yet')
+            raise Exception('Database does not exist yet.')
         self.conn = sqlite3.connect(filename)
         self.cursor = self.conn.cursor()
         self.alive = True
@@ -38,7 +40,7 @@ class DbConnection:
     def close(self, commit=True):
         if not self.alive:
             raise Exception(
-                'Database connection has already been closed')
+                'Database connection has already been closed.')
         self.cursor.close()
         if commit:
             self.conn.commit()
@@ -46,6 +48,10 @@ class DbConnection:
         self.alive = False
 
     def exec(self, *args):
+        if not self.alive:
+            raise Exception(
+                'Cannot execute query: database connection '
+                'has already been closed.')
         return self.cursor.execute(*args)
 
     def clean_up(self, consumed_only=True, older_than=timedelta(days=2)):
@@ -69,6 +75,7 @@ class Event:
         self.title = kwargs.get('title')
         self.start = kwargs.get('start')
         self.consumed = kwargs.get('consumed', False)
+        self.project = kwargs.get('project')
 
         self.duration = kwargs.get('duration', 0)
 
@@ -84,9 +91,9 @@ def load_config():
     return Config(CONFIG_FILE)
 
 
-def get_events_for_date(db, date, config):
+def get_events_for_date(db, date, day_ends_at=3):
     date_starts = date.replace(
-        hour=config.day_ends_at, minute=0, second=0, microsecond=0)
+        hour=day_ends_at, minute=0, second=0, microsecond=0)
     date_ends = date_starts + timedelta(days=1)
     logger.info(
         'Getting events between {} and {}'.format(date_starts, date_ends))
@@ -151,9 +158,13 @@ def categorise_events(events, definitions):
     return events, projects
 
 
-def calculate_event_durations(events, config):
+def compress_events(events, config):
     '''
-    Remove events that are very short.
+    Remove events that are very short and squash the results.
+    If two events in series represent the same activity, the duration
+    properties of the second event will be added to the first event
+    and the second event will be removed from the events list
+    TODO smarter handling of system events: pause/resume events
     '''
     # Ensure events are in order of occurrence
     events.sort(key=lambda x: x.start)
@@ -220,25 +231,34 @@ def submit(interface, projects):
     return successful, failed
 
 
-if __name__ == '__main__':
+def main():
     db = DbConnection()
     config = load_config()
 
-    events = get_events_for_date(db, config.date)
-    events = calculate_event_durations(events)
+    events = get_events_for_date(db, config.date, config.day_ends_at)
+    events = compress_events(events, config)
 
     events, projects = categorise_events(events, config.project_definitions)
 
     if not events:
-        logger.debug('No events')
+        logger.info('No events!')
         raise SystemExit()
 
-    api = TogglApiInterface(config)
-    successful, failed = submit(api, projects)
+    if config.render:
+        logger.info('Building preview HTML...')
+        autotoggl.render.render_events(events)
 
-    db.consume(successful)
+    if not config.local:
+        api = TogglApiInterface(config)
+        successful, failed = submit(api, projects)
 
-    if failed:
-        logger.warn('{} events failed to be submitted'.format(len(failed)))
+        db.consume(successful)
+
+        if failed:
+            logger.warn('{} events failed to be submitted'.format(len(failed)))
 
     db.close()
+
+
+if __name__ == '__main__':
+    main()
