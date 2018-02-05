@@ -1,27 +1,25 @@
 import datetime
 import json
-import logging
 import os
 
-from datetime import timedelta, timezone
+from datetime import timedelta
 from random import choice
-from time import sleep
 
 import autotoggl.autotoggl
 from autotoggl.autotoggl import (
     Event,
     categorise_event,
     categorise_events,
-    calculate_event_durations,
+    compress_events,
     load_config,
     submit,
 )
 from autotoggl.config import Config
-from autotoggl.toggl_api import TogglApiInterface
 from autotoggl.util import midnight
 
 from autotoggl.render import render_events
 
+from tests import test_common
 from tests.test_credentials import (
     TEST_WORKSPACE,
     TEST_WORKSPACE_ID,
@@ -29,14 +27,7 @@ from tests.test_credentials import (
 )
 
 
-def _init_logger(name=__file__, level=logging.DEBUG):
-    logger = logging.getLogger(name)
-    logger.setLevel(level)
-    logger.addHandler(logging.StreamHandler())
-    return logger
-
-
-logger = _init_logger()
+logger = test_common.get_logger(__file__)
 autotoggl.logger = logger
 autotoggl.BASE_DIR = os.path.expanduser('~/autotoggl/test/')
 
@@ -137,68 +128,25 @@ def generate_events(howmany=15):
     return events
 
 
-def _get_test_config():
-    return Config(json_data={
-        'api_key': TEST_API_KEY,
-        'default_workspace': TEST_WORKSPACE,
-        'default_day': 'today',
-        'minimum_event_seconds': 60,
-        'day_ends_at': 3,
-        'project_definitions': [
-            {
-                'process': 'sublime_text',
-                'project_pattern': '.*\\((.*?)\\) - Sublime Text.*',
-                'description_pattern': '(.*?) . \\(.*?\\) - Sublime Text.*'
-            },
-            {
-                'process': 'studio64',
-                'project_pattern': '(.*?) - \\[.*\\].*',
-                'description_pattern': '.*? - \\[.*?\\] - (.*?) - .*'
-            },
-            {
-                'process': 'chrome',
-                'projects': [
-                    {
-                        'title': 'Duolingo',
-                        'window_contains': [
-                            'duolingo',
-                        ]
-                    },
-                    {
-                        'title': 'Passive',
-                        'window_contains': [
-                            'guardian'
-                            'netflix'
-                            'news',
-                            'politics',
-                            'reddit',
-                            'starcraft',
-                        ]
-                    },
-                ]
-            },
-        ]
-    })
-
-
-def test_calculate_event_durations(events=None, config=None):
+def test_compress_events(events=None, config=None):
     if not config:
-        config = _get_test_config()
+        config = test_common.get_test_config()
     if not events:
         events = [Event(**x) for x in EVENTS]
 
-    events = calculate_event_durations(events, config)
+    events = compress_events(events, config)
     for e in events:
         categorise_event(e, config.defs())
 
     EXPECTED_VALUES = [
-    {'duration': 155, 'title': 'StarCraft on Reddit', 'process': 'chrome', 'start': '10:22:00'},
-    {'duration': 5510, 'title': 'LEDControl - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': '10:25:05'},
-    {'duration': 1890, 'title': '/gdbackup/gdbackup.py (gdbackup) - Sublime Text', 'process': 'sublime_text', 'start': '11:56:55'},
-    {'duration': 5410, 'title': 'Commons - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': '12:30:55'},
-    {'duration': 125, 'title': 'LEDControl - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': '14:01:05'},
-    {'duration': 95, 'title': '/gdbackup/gdbackup.py (gdbackup) - Sublime Text', 'process': 'sublime_text', 'start': '14:04:30'},
-    {'duration': 120, 'title': 'Politics', 'process': 'chrome', 'start': '15:36:05'}, ]
+        {'duration': 155, 'title': 'StarCraft on Reddit', 'process': 'chrome', 'start': '10:22:00'},
+        {'duration': 5510, 'title': 'LEDControl - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': '10:25:05'},
+        {'duration': 1890, 'title': '/gdbackup/gdbackup.py (gdbackup) - Sublime Text', 'process': 'sublime_text', 'start': '11:56:55'},
+        {'duration': 5410, 'title': 'Commons - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': '12:30:55'},
+        {'duration': 125, 'title': 'LEDControl - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': '14:01:05'},
+        {'duration': 95, 'title': '/gdbackup/gdbackup.py (gdbackup) - Sublime Text', 'process': 'sublime_text', 'start': '14:04:30'},
+        {'duration': 120, 'title': 'Politics', 'process': 'chrome', 'start': '15:36:05'},
+    ]
 
     _equal(len(events), len(EXPECTED_VALUES), data=events)
 
@@ -211,7 +159,7 @@ def test_calculate_event_durations(events=None, config=None):
 
 
 def test_project_definitions(config=None):
-    config = _get_test_config()
+    config = test_common.get_test_config()
     _equal(categorise_event(Event(**{
             'title': 'Duolingo',
             'process': 'chrome'
@@ -238,16 +186,16 @@ def test_project_definitions(config=None):
     _equal(event.description, 'File.java')
 
 
-def test_api_interface(config=None):
-    config = _get_test_config()
-    interface = TogglApiInterface(config)
+# def test_api_interface(config=None):
+#     config = test_common.get_test_config()
+#     interface = TogglApiInterface(config)
     # j = interface.get_workspaces()
     # logger.info(json.dumps(j, indent=2))
     # test_api_get_projects(interface)
     # pid = test_api_create_project(interface)
     # test_api_create_time_entry(interface, pid)
     # test_api_delete_project(interface, pid)
-    logger.info(interface)
+    # logger.info(interface)
 
 
 # def test_api_get_projects(interface):
@@ -279,50 +227,10 @@ def test_api_interface(config=None):
 
 
 def test_config():
-    file_config = {
-        'api_key': TEST_API_KEY,
-        'default_workspace': TEST_WORKSPACE,
-        'default_day': 'today',
-        'minimum_event_seconds': 60,
-        'day_ends_at': 3,
-        'project_definitions': [
-            {
-                'process': 'sublime_text',
-                'project_pattern': '.*\\((.*?)\\) - Sublime Text.*',
-                'description_pattern': '(.*?) . \\(.*?\\) - Sublime Text.*'
-            },
-            {
-                'process': 'studio64',
-                'project_pattern': '(.*?) - \\[.*\\].*',
-                'description_pattern': '.*? - \\[.*?\\] - (.*?) - .*'
-            },
-            {
-                'process': 'chrome',
-                'projects': [
-                    {
-                        'title': 'Duolingo',
-                        'window_contains': [
-                            'duolingo',
-                        ]
-                    },
-                    {
-                        'title': 'Passive',
-                        'window_contains': [
-                            'guardian'
-                            'netflix'
-                            'news',
-                            'politics',
-                            'reddit',
-                            'starcraft',
-                        ]
-                    },
-                ]
-            },
-        ]
-    }
-
-    config = Config(json_data=file_config)
+    config = test_common.get_test_config()
     _equal(midnight(config.date), midnight(datetime.datetime.today()))
+
+    file_config = config.as_json()
 
     file_config.update(default_day='yesterday')
     config = Config(json_data=file_config)
@@ -340,7 +248,8 @@ def test_config():
         'minimum_event_seconds': 60,
         'day_ends_at': 3,
         'day': 'yesterday',
-        'date': '15-10-02'
+        'date': '15-10-02',
+        'local': False
     }
     # Test parsing of date with partial year
     config = Config(json_data=file_config, clargs=Bunch(clargs))
