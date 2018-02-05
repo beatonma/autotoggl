@@ -1,3 +1,4 @@
+import html
 import os
 from datetime import datetime, timedelta
 
@@ -74,7 +75,7 @@ div{{
 {styles}
 </style>
 </head>
-<body><div id="key">{key}</div><div id="hours">{hours}</div><div id="container">'''
+<body><header>{start} -> {end}</header><div id="key">{key}</div><div id="hours">{hours}</div><div id="container">'''
 
     html_end = '''
 </div>
@@ -100,7 +101,6 @@ function show(text){{
     for e in events:
         project = e.project
         if not project:
-            print('No project!')
             continue
         if project not in project_colors:
             project_colors[project] = colors[len(project_colors)]
@@ -108,22 +108,27 @@ function show(text){{
             '''
             <div class="event {project}" style="left:{start}%;width:{width}%" onmouseover="show({about})"></div>'''
             .format(
-                project=project,
+                project=html.escape(project),
                 start=round(((e.start - start) / total_width * 100), 2),
                 width=round((e.duration / total_width * 100), 2),
-                about='\'{}<br>{} -> {}\''.format(
+                about=html.escape('\'{}<br>{} -> {}\''.format(
                     e.title,
-                    datetime.fromtimestamp(e.start),
-                    datetime.fromtimestamp(e.start + e.duration)),
+                    '{}{}'.format(
+                        e.start,
+                        datetime.fromtimestamp(e.start)),
+                    '{}{}'.format(
+                        e.start + e.duration,
+                        datetime.fromtimestamp(e.start + e.duration)))),
                 ))
 
-    print(project_colors)
     styles = ['.{} {{background:{};}}'.format(x, y)
               for x, y in project_colors.items()]
     key = [_key(x) for x in project_colors]
     with open(file, 'w') as f:
         f.write(
             html_start.format(
+                start=html.escape(datetime.fromtimestamp(start).isoformat()),
+                end=html.escape(datetime.fromtimestamp(end).isoformat()),
                 styles=''.join(styles),
                 key=''.join(key),
                 hours=_hours(start, end)))
@@ -136,7 +141,7 @@ def _key(project):
     <div class="key-item">
         <div class="key-color {project}"></div><div class="key-name">{project}</div>
     </div>
-    '''.format(project=project)
+    '''.format(project=html.escape(project))
 
 
 def _hours(start, end):
