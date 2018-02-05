@@ -16,6 +16,15 @@ SYSTEM_EVENTS = [
     'System.SessionUnlock',
     'System.Idle',
     'System.UnIdle',
+    'Main.OnInitAfterBoot',
+    'Main.OnClose',
+    'System.Resume',
+    'System.Suspend',
+    'System.AwayMode.Entering',
+    'System.AwayMode.Exiting',
+    'System.SessionLogon',
+    'System.SessionLoggoff',
+    'System.OnEndSession',
 ]
 IGNORE_PROCESSES = [
     'explorer',
@@ -25,7 +34,7 @@ IGNORE_PROCESSES = [
     'OpenWith',
     'LockApp',
     'Desktop',
-    'ApplicationFrameHost'
+    'ApplicationFrameHost',
 ]
 
 
