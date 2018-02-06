@@ -1,3 +1,4 @@
+import json
 import logging
 
 from autotoggl.config import Config
@@ -8,7 +9,7 @@ from tests.test_credentials import (
 )
 
 
-def get_logger(name=__file__, level=logging.DEBUG):
+def get_logger(name=__name__, level=logging.DEBUG):
     logger = logging.getLogger(name)
     logger.setLevel(level)
     logger.addHandler(logging.StreamHandler())
@@ -16,6 +17,28 @@ def get_logger(name=__file__, level=logging.DEBUG):
 
 
 logger = get_logger()
+
+
+def equal(actual, expected, comment='', data=None):
+    try:
+        assert(expected == actual)
+        logger.info(
+            '[EQUAL]{} {}'.format(
+                ' (' + comment + ')' if comment else '',
+                actual))
+    except AssertionError as e:
+        logger.warn('ASSERTION ERROR (NOT EQUAL):')
+        logger.warn('  Expected: {}'.format(expected))
+        logger.warn('    Actual: {}'.format(actual))
+        if comment:
+            logger.warn('   Comment: {}'.format(comment))
+        if data:
+            try:
+                logger.warn(
+                    '      Data: {}'.format(json.dumps(data, indent=2)))
+            except:
+                logger.warn('   Data: {}'.format(data))
+        raise SystemExit()
 
 
 def get_test_config():
