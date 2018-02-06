@@ -1,5 +1,4 @@
 import datetime
-import json
 import os
 
 from datetime import timedelta
@@ -20,6 +19,7 @@ from autotoggl.util import midnight
 from autotoggl.render import render_events
 
 from tests import test_common
+from tests.test_common import equal
 from tests.test_credentials import (
     TEST_WORKSPACE,
     TEST_WORKSPACE_ID,
@@ -27,24 +27,9 @@ from tests.test_credentials import (
 )
 
 
-logger = test_common.get_logger(__file__)
+logger = test_common.get_logger(__name__)
 autotoggl.logger = logger
 autotoggl.BASE_DIR = os.path.expanduser('~/autotoggl/test/')
-
-
-def _equal(actual, expected, data=None):
-    try:
-        assert(expected == actual)
-    except AssertionError as e:
-        logger.warn('ASSERTION ERROR (NOT EQUAL):')
-        logger.warn('  Expected: {}'.format(expected))
-        logger.warn('    Actual: {}'.format(actual))
-        if data:
-            try:
-                logger.warn('  Data: {}'.format(json.dumps(data, indent=2)))
-            except:
-                logger.warn('  Data: {}'.format(data))
-        raise SystemExit()
 
 
 class Bunch(object):
@@ -148,32 +133,44 @@ def test_compress_events(events=None, config=None):
         {'duration': 120, 'title': 'Politics', 'process': 'chrome', 'start': '15:36:05'},
     ]
 
-    _equal(len(events), len(EXPECTED_VALUES), data=events)
+    equal(len(events), len(EXPECTED_VALUES), data=events)
 
     for x, y in zip(events, EXPECTED_VALUES):
-        _equal(int(x.duration), int(y['duration']), data=[x, y])
-        _equal(x.process, y['process'], data=[x, y])
-        _equal(x.title, y['title'], data=[x, y])
+        equal(int(x.duration), int(y['duration']), data=[x, y])
+        equal(x.process, y['process'], data=[x, y])
+        equal(x.title, y['title'], data=[x, y])
 
     render_events(events)
 
 
 def test_project_definitions(config=None):
     config = test_common.get_test_config()
-    _equal(categorise_event(Event(**{
-            'title': 'Duolingo',
-            'process': 'chrome'
-        }), config.defs()), 'Duolingo')
+    equal(
+        categorise_event(
+            Event(**{
+                'title': 'Duolingo',
+                'process': 'chrome'
+            }),
+            config.defs()),
+        'Duolingo')
 
-    _equal(categorise_event(Event(**{
-            'title': '/auto-toggl/main.py (auto-toggl) - Sublime Text',
-            'process': 'sublime_text'
-        }), config.defs()), 'auto-toggl')
+    equal(
+        categorise_event(
+            Event(**{
+                'title': '/auto-toggl/main.py (auto-toggl) - Sublime Text',
+                'process': 'sublime_text'
+            }),
+            config.defs()),
+        'auto-toggl')
 
-    _equal(categorise_event(Event(**{
-            'title': 'LEDControl - [/path/to/proj] - File.java - Android Studio 3.0',
-            'process': 'studio64'
-        }), config.defs()), 'LEDControl')
+    equal(
+        categorise_event(
+            Event(**{
+                'title': 'LEDControl - [/path/to/proj] - File.java - Android Studio 3.0',
+                'process': 'studio64'
+            }),
+            config.defs()),
+        'LEDControl')
 
     # Confirm that categorise_event correctly parses project and description
     # and adds those data to the original event object
@@ -182,65 +179,62 @@ def test_project_definitions(config=None):
         'process': 'studio64'
     })
     categorise_event(event, config.defs())
-    _equal(event.project, 'LEDControl')
-    _equal(event.description, 'File.java')
+    equal(event.project, 'LEDControl')
+    equal(event.description, 'File.java')
 
+    event = Event(**{
+            'title': 'Duolingo',
+            'process': 'chrome'
+        })
+    categorise_event(event, config.defs())
+    equal(event.project, 'Duolingo')
+    equal(event.description, 'German practice')
 
-# def test_api_interface(config=None):
-#     config = test_common.get_test_config()
-#     interface = TogglApiInterface(config)
-    # j = interface.get_workspaces()
-    # logger.info(json.dumps(j, indent=2))
-    # test_api_get_projects(interface)
-    # pid = test_api_create_project(interface)
-    # test_api_create_time_entry(interface, pid)
-    # test_api_delete_project(interface, pid)
-    # logger.info(interface)
+    event = Event(**{
+            'title': 'StarCraft on Twitch',
+            'process': 'chrome'
+        })
+    categorise_event(event, config.defs())
+    equal(event.project, 'Casual')
+    equal(event.description, 'Internetting')
 
+    event = Event(**{
+            'title': 'BBC iPlayer - Requiem - Series 1: Episode 1',
+            'process': 'chrome'
+        })
+    categorise_event(event, config.defs())
+    equal(event.project, 'Casual')
+    equal(event.description, 'Requiem - Series 1: Episode 1')
 
-# def test_api_get_projects(interface):
-#     j = interface.get_all_projects()
-
-
-# def test_api_create_project(interface):
-#     j = interface.create_project('API_TEST_PROJECT', TEST_WORKSPACE_ID)
-#     _equal(j['data']['wid'], TEST_WORKSPACE_ID)
-
-#     pid = j['data']['id']
-#     return pid
-
-
-# def test_api_create_time_entry(interface, pid):
-#     j = interface.create_time_entry(
-#         pid,
-#         (datetime.datetime.now(timezone.utc).astimezone() - timedelta(hours=1))
-#         .replace(microsecond=0).isoformat(),
-#         120
-#     )
-#     logger.debug('Time entry response: {}'.format(j))
-
-
-# def test_api_delete_project(interface, pid):
-#     sleep(10)
-#     deleted = interface.delete_project(pid)
-#     _equal(deleted, True)
+    event = Event(**{
+            'title': 'Netflix',
+            'process': 'chrome'
+        })
+    categorise_event(event, config.defs())
+    equal(event.project, 'Casual')
+    equal(event.description, 'netflix')
 
 
 def test_config():
     config = test_common.get_test_config()
-    _equal(midnight(config.date), midnight(datetime.datetime.today()))
+    equal(midnight(config.date), midnight(datetime.datetime.today()))
 
     file_config = config.as_json()
 
+    config2 = Config(clargs={}, json_data=file_config)
+    equal(
+        config.as_json(), config2.as_json(),
+        comment='Building from dumped json should yield equal object')
+
     file_config.update(default_day='yesterday')
-    config = Config(json_data=file_config)
-    _equal(config.date,
-           midnight(datetime.datetime.today() - timedelta(days=1)))
+    config = Config(clargs={}, json_data=file_config)
+    equal(config.date,
+          midnight(datetime.datetime.today() - timedelta(days=1)))
 
     # Test integer workspace ID is read as an integer
     file_config.update(default_workspace='20')
-    config = Config(json_data=file_config)
-    _equal(config.default_workspace, 20)
+    config = Config(clargs={}, json_data=file_config)
+    equal(config.default_workspace, 20)
 
     clargs = {
         'key': TEST_API_KEY,
@@ -249,30 +243,16 @@ def test_config():
         'day_ends_at': 3,
         'day': 'yesterday',
         'date': '15-10-02',
-        'local': False
+        'local': False,
+        'render': False,
     }
     # Test parsing of date with partial year
     config = Config(json_data=file_config, clargs=Bunch(clargs))
-    _equal(config.date, datetime.datetime(2015, 10, 2))
+    equal(config.date, datetime.datetime(2015, 10, 2))
 
     # Test parsing of date with full year
     clargs.update(date='2015-10-03')
     config = Config(json_data=file_config, clargs=Bunch(clargs))
-    _equal(config.date, datetime.datetime(2015, 10, 3))
+    equal(config.date, datetime.datetime(2015, 10, 3))
 
     return config
-
-
-if __name__ == '__main__':
-    logger.info('test_config...')
-    config = test_config()
-    logger.info('test_project_definitions...')
-    test_project_definitions(config)
-    logger.info('test_calculate_event_durations...')
-    test_calculate_event_durations([Event(**x) for x in EVENTS], config)
-
-    # logger.info('test_api_interface...')
-    # test_api_interface(config)
-
-    logger.info('')
-    logger.info('Tests complete!')
