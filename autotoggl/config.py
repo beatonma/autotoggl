@@ -86,7 +86,7 @@ class Config:
         self.day_ends_at = config.get('day_ends_at', 3)
 
     def _load_from_clargs(self, args=None):
-        if not args:
+        if args is None:
             parser = ArgumentParser()
             parser.add_argument(
                 'day',
@@ -138,6 +138,9 @@ class Config:
                 help='Contruct a simple HTML preview of event data',)
 
             args = parser.parse_args()
+
+        if not args:
+            return
 
         if args.day:
             self.default_day = args.day
@@ -232,14 +235,14 @@ class Config:
                         'process': 'chrome',
                         'projects': [
                             {
-                                'title': 'Duolingo',
+                                'project_title': 'Duolingo',
                                 'description': 'German',
                                 'window_contains': [
                                     'duolingo'
                                 ]
                             },
                             {
-                                'title': 'Casual',
+                                'project_title': 'Casual',
                                 'description': 'Internetting',
                                 'description_pattern': '(.*)',
                                 'window_contains': [
@@ -257,47 +260,103 @@ class Config:
             }, f)
 
 
-class ProcessClassifier:
+class Classifier:
+    # Special value for self.description
+    # If the project is matched using window_contains then the matching
+    # value will be used as the description value
+    # e.g.
+    # description: '_',
+    # window_contains: ['netflix', 'iplayer']
+    # -> If the window title contains 'netflix' then the description
+    #    will be set to 'netflix'
+    USE_MATCH = '_'
+
     def __init__(self, json_data):
-        self._from_json(json_data)
-
-    def _from_json(self, j):
-        self.process = j.get('process')
-
-        self.description = j.get('description')
-        self.description_pattern = j.get('description_pattern')
-
-        self.project_pattern = j.get('project_pattern')
-        self.projects = j.get('projects')
+        self.project_title = json_data.get('project_title')
+        self.project_pattern = json_data.get('project_pattern')
+        self.description = json_data.get('description')
+        self.description_pattern = json_data.get('description_pattern', [])
+        self.window_contains = json_data.get('window_contains', [])
 
     def get_project(self, window_title):
         if self.project_pattern:
             m = re.match(self.project_pattern, window_title)
             if m:
                 return m.group(1)
-        if self.projects:
-            for p in self.projects:
-                if [x for x in p.get('window_contains')
-                        if x in window_title.lower()]:
-                    return p.get('title')
 
-    def get_description(self, window_title, project=None):
-        if self.description_pattern:
-            m = re.match(self.description_pattern, window_title)
+        for x in self.window_contains:
+            if x in window_title.lower():
+                return self.project_title
+
+    def get_description(self, window_title):
+        for p in self.description_pattern:
+            m = re.match(p, window_title)
             if m:
                 return m.group(1)
 
+        for x in self.window_contains:
+            if x in window_title.lower():
+                if self.description == Classifier.USE_MATCH:
+                    return x
+
+                return self.description
+
+    def as_json(self):
+        return {
+            'project_title': self.project_title,
+            'project_pattern': self.project_pattern,
+            'description': self.description,
+            'description_pattern': self.description_pattern,
+            'window_contains': self.window_contains,
+        }
+
+
+class Project(Classifier):
+    '''
+    Alias of Classifier that is used as a child object of
+    ProcessClassifier
+    '''
+    pass
+
+
+class ProcessClassifier(Classifier):
+    '''
+    Implementation of Classifier with added fields
+    for a process name and a list of Projects
+    Represents an item in the Config.project_definitions list
+    '''
+    def __init__(self, json_data):
+        super().__init__(json_data)
+
+        self.process = json_data.get('process')
+        self.projects = [Project(x) for x in json_data.get('projects', [])]
+
+    def get_project(self, window_title):
+        for x in self.projects:
+            p = x.get_project(window_title)
+            if p:
+                return p
+
+        return super().get_project(window_title)
+
+    def get_description(self, window_title):
+        for x in self.projects:
+            d = x.get_description(window_title)
+            if d:
+                return d
+
+        return super().get_description(window_title)
+
     def __repr__(self):
-        return json.dumps({
+        return json.dumps(
+            {
                 'process': self.process,
                 'project_pattern': self.project_pattern,
                 'projects': self.projects,
             }, indent=2)
 
     def as_json(self):
-        return {
-            'process': self.process,
-            'project_pattern': self.project_pattern,
-            'description_pattern': self.description_pattern,
-            'projects': self.projects,
-        }
+        j = super().as_json()
+        j['process'] = self.process
+        j['projects'] = [x.as_json() for x in self.projects]
+        return j
