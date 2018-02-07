@@ -35,6 +35,8 @@ class Config:
         self.date = None
         self.local = False
         self.render = False
+        self.reset = False
+        self.showall = False
 
         if file:
             self._load_from_file(file)
@@ -108,7 +110,8 @@ class Config:
 
             parser.add_argument(
                 '--default_workspace',
-                help='The workspace on which any new projects should be created.',)
+                help='The workspace on which any new projects should '
+                     'be created.',)
 
             parser.add_argument(
                 '--key',
@@ -137,6 +140,20 @@ class Config:
                 default=False,
                 help='Contruct a simple HTML preview of event data',)
 
+            parser.add_argument(
+                '-reset',
+                action='store_true',
+                default=False,
+                help='Reset database entries for the given day to '
+                     'consumed=False',)
+
+            parser.add_argument(
+                '-showall',
+                action='store_true',
+                default=False,
+                help='Show all events for the given day without any '
+                     'filtering')
+
             args = parser.parse_args()
 
         if not args:
@@ -157,6 +174,8 @@ class Config:
 
         self.local = args.local
         self.render = args.render
+        self.reset = args.reset
+        self.showall = args.showall
 
     def _process_args(self):
         if self.date:
@@ -179,6 +198,10 @@ class Config:
                 self.date = datetime.today() - timedelta(days=1)
         self.date = midnight(self.date)
 
+        self.day_starts = self.date.replace(
+            hour=self.day_ends_at, minute=0, second=0, microsecond=0)
+        self.day_ends = self.day_starts + timedelta(days=1)
+
         if self.default_workspace:
             # Try to parse given workspace as an integer ID
             try:
@@ -193,6 +216,12 @@ class Config:
         if not self.date or type(self.date) != datetime:
             raise InvalidConfig('Date could not be interpreted')
 
+    def day_starts(self):
+        return self.day_starts
+
+    def day_ends(self):
+        return self.day_ends
+
     def as_json(self):
         return {
             'api_key': self.api_key,
@@ -206,6 +235,8 @@ class Config:
             ],
             'local': self.local,
             'render': self.render,
+            'reset': self.reset,
+            'showall': self.showall,
         }
 
     def _create_example_file(self, filename):
@@ -260,6 +291,13 @@ class Config:
             }, f)
 
 
+class ClassifierResult:
+    def __init__(self, **kwargs):
+        self.project = kwargs.get('project')
+        self.description = kwargs.get('description')
+        self.tags = kwargs.get('tags', [])
+
+
 class Classifier:
     # Special value for self.description
     # If the project is matched using window_contains then the matching
@@ -278,6 +316,13 @@ class Classifier:
         self.description_pattern = json_data.get('description_pattern', [])
         self.window_contains = json_data.get('window_contains', [])
         self.project_alias = json_data.get('alias', {})
+        self.tags = json_data.get('tags', [])
+
+    def get(self, window_title):
+        # TODO replace get_project, get_description to reduce searches
+        project = None
+        description = None
+        tags = []
 
     def get_project(self, window_title):
         if self.project_pattern:
@@ -288,6 +333,9 @@ class Classifier:
         for x in self.window_contains:
             if x in window_title.lower():
                 return self._alias(self.project_title)
+
+        if not self.project_pattern and not self.window_contains:
+            return self.project_title
 
     def get_description(self, window_title):
         for p in self.description_pattern:
