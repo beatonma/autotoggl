@@ -29,7 +29,12 @@ class ApiError(Exception):
 
 
 class TogglApiInterface:
-    def __init__(self, config):
+    def __init__(self, config, mock=False):
+
+        # If true, network requests will be disabled and empty data
+        # will be returned
+        self.mock = mock
+
         self.default_workspace = config.default_workspace
 
         self.api_token = b64encode(
@@ -173,6 +178,9 @@ class TogglApiInterface:
         return j
 
     def _get(self, url_stub):
+        if self.mock:
+            return {}
+
         r = requests.get(
             API_BASE + url_stub,
             headers=self.headers,
@@ -182,6 +190,9 @@ class TogglApiInterface:
         return r.json()
 
     def _post(self, url_stub, data):
+        if self.mock:
+            return {}
+
         r = requests.post(
             API_BASE + url_stub,
             headers=self.headers,
@@ -192,13 +203,15 @@ class TogglApiInterface:
         return r.json()
 
     def _delete(self, url_stub):
+        if self.mock:
+            return True
+
         r = requests.delete(
             API_BASE + url_stub,
             headers=self.headers,
         )
         self._show_response(r)
         sleep(1)
-        # return r
         return r.status_code == 200
 
     def _show_response(self, r):
