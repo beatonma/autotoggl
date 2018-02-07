@@ -36,6 +36,10 @@ IGNORE_PROCESSES = [
     'Desktop',
     'ApplicationFrameHost',
 ]
+PROCESS_WHITELIST = [
+    'sublime_text',
+    'studio64',
+]
 
 
 def _init_db():
@@ -94,7 +98,11 @@ if not title:
 if process_name in IGNORE_PROCESSES:
     # Ignore unwanted processes
     raise SystemExit()
-    
+
+if PROCESS_WHITELIST and process_name not in PROCESS_WHITELIST:
+    # Ignore process that is not whitelisted
+    raise SystemExit()
+
 conn, cursor = _init_db()
 try:
     _add(cursor, process_name, title)
