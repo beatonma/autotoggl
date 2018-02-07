@@ -8,7 +8,7 @@ import autotoggl.render
 from datetime import timedelta
 
 from autotoggl.config import Config
-from autotoggl.toggl_api import TogglApiInterface, ApiError
+from autotoggl.api import TogglApiInterface, ApiError
 
 BASE_DIR = os.path.expanduser('~/autotoggl/')
 DB_NAME = os.path.join(BASE_DIR, 'toggl.db')
@@ -29,7 +29,7 @@ def _init_logger(name=__file__, level=logging.DEBUG):
 logger = _init_logger()
 
 
-class DbConnection:
+class DatabaseManager:
     def __init__(self, filename=DB_NAME):
         if not os.path.exists(filename):
             raise Exception('Database does not exist yet.')
@@ -238,7 +238,7 @@ def submit(interface, projects):
 
 
 def main():
-    with DbConnection() as db:
+    with DatabaseManager() as db:
         config = load_config()
 
         events = get_events_for_date(db, config.date, config.day_ends_at)

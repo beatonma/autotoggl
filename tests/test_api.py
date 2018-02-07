@@ -1,7 +1,7 @@
 from time import sleep
 from datetime import datetime, timezone, timedelta
 
-from autotoggl import toggl_api
+from autotoggl import api
 from tests import test_common
 from tests.test_common import equal
 from tests.test_credentials import (
@@ -16,7 +16,7 @@ logger = test_common.get_logger(name=__name__)
 
 def test_api_interface(config=None):
     config = test_common.get_test_config()
-    interface = toggl_api.TogglApiInterface(config)
+    interface = api.TogglApiInterface(config)
 
     interface.get_all_projects()
 
