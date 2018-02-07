@@ -1,3 +1,4 @@
+import datetime
 import logging
 import os
 import sqlite3
@@ -32,7 +33,7 @@ logger = _init_logger()
 class DatabaseManager:
     def __init__(self, filename=DB_PATH):
         if not os.path.exists(filename):
-            raise Exception('Database does not exist yet.')
+            self._create(filename)
         self.conn = sqlite3.connect(filename)
         self.cursor = self.conn.cursor()
         self.alive = True
@@ -42,6 +43,25 @@ class DatabaseManager:
 
     def __exit__(self, ctx_type, ctx_value, ctx_traceback):
         self.close(commit=True)
+
+    def _create(self, filename):
+        logger.info('Creating database {}'.format(filename))
+        dirname = os.path.dirname(filename)
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+
+        conn = sqlite3.connect(filename)
+        cursor = conn.cursor()
+
+        sql = '''CREATE TABLE toggl
+                 (process_name TEXT NOT NULL,
+                  window_title TEXT NOT NULL,
+                  start INTEGER NOT NULL,
+                  consumed BOOLEAN NOT NULL DEFAULT 0)'''
+        cursor.execute(sql)
+        cursor.close()
+        conn.commit()
+        conn.close()
 
     def close(self, commit=True):
         if not self.alive:
@@ -58,7 +78,12 @@ class DatabaseManager:
             raise Exception(
                 'Cannot execute query: database connection '
                 'has already been closed.')
-        return self.cursor.execute(*args)
+        try:
+            return self.cursor.execute(*args)
+        except Exception as e:
+            logger.error(
+                'Unable to execute query {args}: {err}'
+                .format(args=args, err=e))
 
     def clean_up(self, consumed_only=True, older_than=timedelta(days=2)):
         pass
@@ -68,10 +93,37 @@ class DatabaseManager:
         Mark the given events (and any events merged with them) as consumed,
         meaning they have been submitted to Toggl successfully
         '''
-        ids = [e.merged + [e.id] for e in events if e.consumed]
+        ids = []
+        for e in events:
+            if e.consumed:
+                ids += e.merged
+                ids.append(e.id)
         sql = '''UPDATE toggl SET consumed=? WHERE rowid=?'''
         for rowid in ids:
             self.exec(sql, (True, rowid))
+
+    def get_events(self, start_datetime, end_datetime):
+        c = self.exec(
+            '''SELECT rowid, process_name, window_title, start, consumed
+               FROM toggl
+               WHERE start>=? AND start<=?''',
+            (start_datetime.timestamp(), end_datetime.timestamp()))
+        return [
+            Event(
+                id=r[0],
+                process=r[1],
+                title=r[2],
+                start=r[3],
+                consumed=bool(r[4]),
+            ) for r in c.fetchall()]
+
+    def reset(self, start_datetime, end_datetime):
+        sql = '''UPDATE toggl
+                 SET consumed=?
+                 WHERE start>=? AND start<=?'''
+        self.exec(
+            sql,
+            (False, start_datetime.timestamp(), end_datetime.timestamp()))
 
 
 class Event:
@@ -82,6 +134,8 @@ class Event:
         self.start = kwargs.get('start')
         self.consumed = kwargs.get('consumed', False)
         self.project = kwargs.get('project')
+        self.tags = kwargs.get('tags', [])
+        self.description = kwargs.get('description')
 
         self.duration = kwargs.get('duration', 0)
 
@@ -91,6 +145,13 @@ class Event:
         self.duration += other.duration
         other.duration = 0
         self.merged.append(other.id)
+
+    def __repr__(self):
+        return '[{}] {} {} {} {} ({})'.format(
+            self.project, self.process,
+            datetime.datetime.fromtimestamp(self.start).isoformat(),
+            self.consumed,
+            self.tags, self.description)
 
 
 def load_config():
@@ -104,21 +165,7 @@ def get_events_for_date(db, date, day_ends_at=3):
     logger.info(
         'Getting events between {} and {}'.format(date_starts, date_ends))
 
-    date_starts = date_starts.timestamp()
-    date_ends = date_ends.timestamp()
-
-    c = db.exec('''SELECT rowid, process_name, window_title, start, consumed
-                   FROM toggl
-                   WHERE start>=? AND start<=?''',
-                (date_starts, date_ends))
-    return [
-        Event(
-            id=r[0],
-            process=r[1],
-            title=r[2],
-            start=r[3],
-            consumed=bool(r[4]),
-        ) for r in c.fetchall()]
+    return db.get_events(date_starts, date_ends)
 
 
 def categorise_event(event, definitions):
@@ -132,6 +179,7 @@ def categorise_event(event, definitions):
     if process_classifier:
         project = process_classifier.get_project(title)
         event.description = process_classifier.get_description(title)
+        event.tags = process_classifier.tags
 
         if project:
             event.project = project
@@ -206,6 +254,14 @@ def compress_events(events, config):
     return list(filter(lambda x: x.duration, events))
 
 
+def print_events(events, starts, ends):
+    logger.info(
+        'Events from {} -> {}'
+        .format(starts.isoformat(), ends.isoformat()))
+    for e in events:
+        logger.info(e)
+
+
 def submit(interface, projects):
     interface.get_all_projects()
     successful = []
@@ -225,8 +281,10 @@ def submit(interface, projects):
             try:
                 interface.create_time_entry(
                     e.project,
+                    e.description,
                     e.start,
-                    e.duration,)
+                    e.duration,
+                    tags=e.tags)
                 e.consumed = True
                 successful.append(e)
             except ApiError as err:
@@ -241,11 +299,24 @@ def main():
     with DatabaseManager() as db:
         config = load_config()
 
+        if config.reset:
+            db.reset(config.day_starts, config.day_ends)
+            logger.info(
+                'All entries between {} and {} have been reset'
+                .format(
+                    config.day_starts.isoformat(),
+                    config.day_ends.isoformat()))
+            return
+
         events = get_events_for_date(db, config.date, config.day_ends_at)
         events = compress_events(events, config)
 
         events, projects = categorise_events(
             events, config.project_definitions)
+
+        if config.showall:
+            print_events(
+                events, config.day_starts, config.day_ends)
 
         if not events:
             logger.info('No events!')
@@ -255,7 +326,22 @@ def main():
             logger.info('Building preview HTML...')
             autotoggl.render.render_events(events)
 
-        if not config.local:
+        # pending_submission = sum([len(es) for _, es in projects.items()])
+        pending_submission = 0
+        for p in projects:
+            n_total_events = len(projects[p])
+            projects[p] = [e for e in projects[p] if not e.consumed]
+            n_pending_events = len(projects[p])
+            logger.info(
+                'Project \'{project}\': {pending} events '
+                '({consumed} already consumed)'
+                .format(
+                    project=p,
+                    pending=n_pending_events,
+                    consumed=n_total_events - n_pending_events))
+            pending_submission += n_pending_events
+
+        if pending_submission > 0 and not config.local:
             api = TogglApiInterface(config)
             successful, failed = submit(api, projects)
 
