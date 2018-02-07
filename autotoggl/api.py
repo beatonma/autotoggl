@@ -156,7 +156,10 @@ class TogglApiInterface:
         '''
         return self._delete('projects/' + str(pid))
 
-    def create_time_entry(self, project_id, start_timestamp, duration):
+    def create_time_entry(self,
+                          project_id, description,
+                          start_timestamp, duration,
+                          tags=[], ):
         if type(project_id) is str:
             project_id = self.projects[project_id]['pid']
 
@@ -169,9 +172,11 @@ class TogglApiInterface:
         j = self._post('time_entries', {
                 'time_entry': {
                     'pid': project_id,
+                    'description': description,
                     'start': start,
                     'duration': duration,
-                    'created_with': 'autotoggl'
+                    'tags': tags,
+                    'created_with': 'autotoggl',
                 }
             })
         logger.debug(j)
