@@ -60,7 +60,8 @@ def _init_db():
     sql = '''CREATE TABLE toggl
              (process_name TEXT NOT NULL,
               window_title TEXT NOT NULL,
-              start INTEGER NOT NULL)'''
+              start INTEGER NOT NULL,
+              consumed BOOLEAN NOT NULL DEFAULT 0)'''
     cursor.execute(sql)
     return conn, cursor
 
