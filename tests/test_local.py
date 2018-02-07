@@ -1,18 +1,13 @@
 import datetime
 import os
+import sqlite3
 
 from datetime import timedelta
 from random import choice
 
-import autotoggl.autotoggl
-from autotoggl.autotoggl import (
-    Event,
-    categorise_event,
-    categorise_events,
-    compress_events,
-    load_config,
-    submit,
-)
+import autotoggl.api as api
+import autotoggl.autotoggl as autotoggl
+
 from autotoggl.config import Config
 from autotoggl.util import midnight
 
@@ -117,11 +112,11 @@ def test_compress_events(events=None, config=None):
     if not config:
         config = test_common.get_test_config()
     if not events:
-        events = [Event(**x) for x in EVENTS]
+        events = [autotoggl.Event(**x) for x in EVENTS]
 
-    events = compress_events(events, config)
+    events = autotoggl.compress_events(events, config)
     for e in events:
-        categorise_event(e, config.defs())
+        autotoggl.categorise_event(e, config.defs())
 
     EXPECTED_VALUES = [
         {'duration': 155, 'title': 'StarCraft on Reddit', 'process': 'chrome', 'start': '10:22:00'},
@@ -145,27 +140,31 @@ def test_compress_events(events=None, config=None):
 
 def test_project_definitions(config=None):
     config = test_common.get_test_config()
+
+    # Test basic project name via window_contains
     equal(
-        categorise_event(
-            Event(**{
+        autotoggl.categorise_event(
+            autotoggl.Event(**{
                 'title': 'Duolingo',
                 'process': 'chrome'
             }),
             config.defs()),
         'Duolingo')
 
+    # Test basic project name via pattern-matching
     equal(
-        categorise_event(
-            Event(**{
+        autotoggl.categorise_event(
+            autotoggl.Event(**{
                 'title': '/auto-toggl/main.py (auto-toggl) - Sublime Text',
                 'process': 'sublime_text'
             }),
             config.defs()),
         'auto-toggl')
 
+    # Test basic project name via pattern-matching
     equal(
-        categorise_event(
-            Event(**{
+        autotoggl.categorise_event(
+            autotoggl.Event(**{
                 'title': 'LEDControl - [/path/to/proj] - File.java - Android Studio 3.0',
                 'process': 'studio64'
             }),
@@ -174,45 +173,58 @@ def test_project_definitions(config=None):
 
     # Confirm that categorise_event correctly parses project and description
     # and adds those data to the original event object
-    event = Event(**{
+    event = autotoggl.Event(**{
         'title': 'LEDControl - [/path/to/proj] - File.java - Android Studio 3.0',
         'process': 'studio64'
     })
-    categorise_event(event, config.defs())
+    autotoggl.categorise_event(event, config.defs())
     equal(event.project, 'LEDControl')
     equal(event.description, 'File.java')
 
-    event = Event(**{
+    # Test project and description via window_contains
+    event = autotoggl.Event(**{
             'title': 'Duolingo',
             'process': 'chrome'
         })
-    categorise_event(event, config.defs())
+    autotoggl.categorise_event(event, config.defs())
     equal(event.project, 'Duolingo')
     equal(event.description, 'German practice')
 
-    event = Event(**{
+    # Test project and description via window_contains
+    # (neither project nor description present in event title)
+    event = autotoggl.Event(**{
             'title': 'StarCraft on Twitch',
             'process': 'chrome'
         })
-    categorise_event(event, config.defs())
+    autotoggl.categorise_event(event, config.defs())
     equal(event.project, 'Casual')
     equal(event.description, 'Internetting')
 
-    event = Event(**{
+    # Test description pattern-matching
+    event = autotoggl.Event(**{
             'title': 'BBC iPlayer - Requiem - Series 1: Episode 1',
             'process': 'chrome'
         })
-    categorise_event(event, config.defs())
+    autotoggl.categorise_event(event, config.defs())
     equal(event.project, 'Casual')
     equal(event.description, 'Requiem - Series 1: Episode 1')
 
-    event = Event(**{
+    # Test description special value '_'
+    event = autotoggl.Event(**{
             'title': 'Netflix',
             'process': 'chrome'
         })
-    categorise_event(event, config.defs())
+    autotoggl.categorise_event(event, config.defs())
     equal(event.project, 'Casual')
     equal(event.description, 'netflix')
+
+    # Test project alias
+    event = autotoggl.Event(**{
+            'title': '/path/to/project (gassistant) - Sublime Text',
+            'process': 'sublime_text'
+        })
+    autotoggl.categorise_event(event, config.defs())
+    equal(event.project, 'Home Assistant')
 
 
 def test_config():

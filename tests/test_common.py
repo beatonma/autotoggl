@@ -56,6 +56,12 @@ def get_test_config():
                 # as the project title
                 'project_pattern': '.*\\((.*?)\\) - Sublime Text.*',
 
+                # If the resolved project name has an entry in this
+                # dictionary then that name will be used instead
+                'alias': {
+                    'gassistant': 'Home Assistant',
+                },
+
                 # If this pattern matches, the first group will be used
                 # as the event description
                 'description_pattern': ['(.*?) . \\(.*?\\) - Sublime Text.*'],
