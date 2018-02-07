@@ -70,6 +70,11 @@ def get_test_config():
                 'process': 'studio64',
                 'project_pattern': '(.*?) - \\[.*\\].*',
                 'description_pattern': ['.*? - \\[.*?\\] - (.*?) - .*'],
+
+                # TODO implement tags
+                'tags': [
+
+                ]
             },
             {
                 'process': 'chrome',
