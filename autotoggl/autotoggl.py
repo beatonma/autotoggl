@@ -11,7 +11,7 @@ from autotoggl.config import Config
 from autotoggl.api import TogglApiInterface, ApiError
 
 BASE_DIR = os.path.expanduser('~/autotoggl/')
-DB_NAME = os.path.join(BASE_DIR, 'toggl.db')
+DB_PATH = os.path.join(BASE_DIR, 'toggl.db')
 CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
 
 # Special event name indicating that system status has changed
@@ -30,7 +30,7 @@ logger = _init_logger()
 
 
 class DatabaseManager:
-    def __init__(self, filename=DB_NAME):
+    def __init__(self, filename=DB_PATH):
         if not os.path.exists(filename):
             raise Exception('Database does not exist yet.')
         self.conn = sqlite3.connect(filename)
