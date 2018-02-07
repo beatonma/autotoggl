@@ -1,9 +1,9 @@
 import datetime
 import os
+import random
 import sqlite3
 
 from datetime import timedelta
-from random import choice
 
 import autotoggl.api as api
 import autotoggl.autotoggl as autotoggl
@@ -25,6 +25,7 @@ from tests.test_credentials import (
 logger = test_common.get_logger(__name__)
 autotoggl.logger = logger
 autotoggl.BASE_DIR = os.path.expanduser('~/autotoggl/test/')
+autotoggl.DB_PATH = os.path.join(autotoggl.BASE_DIR, 'toggl.db')
 
 
 class Bunch(object):
@@ -92,8 +93,8 @@ def generate_events(howmany=15):
     time = datetime.datetime.today().replace(hour=9, second=0, microsecond=0)
     events = []
     for x in range(0, howmany):
-        time = time + timedelta(seconds=choice(EVENT_LENGTHS))
-        e = choice(EVENT_TYPES)
+        time = time + timedelta(seconds=random.choice(EVENT_LENGTHS))
+        e = random.choice(EVENT_TYPES)
         events.append(
             {
                 'process': e[0],
@@ -257,6 +258,8 @@ def test_config():
         'date': '15-10-02',
         'local': False,
         'render': False,
+        'reset': False,
+        'showall': False,
     }
     # Test parsing of date with partial year
     config = Config(json_data=file_config, clargs=Bunch(clargs))
@@ -268,3 +271,55 @@ def test_config():
     equal(config.date, datetime.datetime(2015, 10, 3))
 
     return config
+
+
+def test_db_consume():
+    start = datetime.datetime(2015, 6, 12, 9, 0, 0)
+    data = [
+        (
+            'chrome',
+            'beatonma.org',
+            int((start + timedelta(hours=x)).timestamp()),
+            False
+        ) for x in range(1, 7)
+    ]
+
+    with autotoggl.DatabaseManager(filename=autotoggl.DB_PATH) as db:
+        sql = '''INSERT INTO toggl VALUES (?, ?, ?, ?)'''
+        for x in data:
+            db.exec(sql, x)
+
+    # Consume events
+    events = [
+        autotoggl.Event(
+            id=n+1,
+            process=x[0],
+            title=x[1],
+            start=x[2],
+            consumed=x[3])
+        for n, x in enumerate(data)
+    ]
+    for e in events[:-1]:
+        e.consumed = True
+
+    # Add final event to merged id list of the previous event
+    events[-2].merged.append(events[-1].id)
+
+    with autotoggl.DatabaseManager(filename=autotoggl.DB_PATH) as db:
+        db.consume(events)
+
+        # Test DatabaseManager.consume()
+        sql = '''SELECT consumed FROM toggl WHERE rowid=?'''
+        for e in events:
+            equal(
+                db.exec(sql, (e.id,)).fetchone()[0],
+                1)
+
+        # test DatabaseManager.reset()
+        db.reset(start, start + timedelta(days=1))
+        for e in events:
+            equal(
+                db.exec(sql, (e.id,)).fetchone()[0],
+                0)
+
+    os.remove(autotoggl.DB_PATH)
