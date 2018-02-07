@@ -37,6 +37,12 @@ class DbConnection:
         self.cursor = self.conn.cursor()
         self.alive = True
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, ctx_type, ctx_value, ctx_traceback):
+        self.close(commit=True)
+
     def close(self, commit=True):
         if not self.alive:
             raise Exception(
@@ -232,32 +238,32 @@ def submit(interface, projects):
 
 
 def main():
-    db = DbConnection()
-    config = load_config()
+    with DbConnection() as db:
+        config = load_config()
 
-    events = get_events_for_date(db, config.date, config.day_ends_at)
-    events = compress_events(events, config)
+        events = get_events_for_date(db, config.date, config.day_ends_at)
+        events = compress_events(events, config)
 
-    events, projects = categorise_events(events, config.project_definitions)
+        events, projects = categorise_events(
+            events, config.project_definitions)
 
-    if not events:
-        logger.info('No events!')
-        raise SystemExit()
+        if not events:
+            logger.info('No events!')
+            raise SystemExit()
 
-    if config.render:
-        logger.info('Building preview HTML...')
-        autotoggl.render.render_events(events)
+        if config.render:
+            logger.info('Building preview HTML...')
+            autotoggl.render.render_events(events)
 
-    if not config.local:
-        api = TogglApiInterface(config)
-        successful, failed = submit(api, projects)
+        if not config.local:
+            api = TogglApiInterface(config)
+            successful, failed = submit(api, projects)
 
-        db.consume(successful)
+            db.consume(successful)
 
-        if failed:
-            logger.warn('{} events failed to be submitted'.format(len(failed)))
-
-    db.close()
+            if failed:
+                logger.warn(
+                    '{} events failed to be submitted'.format(len(failed)))
 
 
 if __name__ == '__main__':
