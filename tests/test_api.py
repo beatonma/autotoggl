@@ -1,7 +1,7 @@
 from time import sleep
 from datetime import datetime, timezone, timedelta
 
-from autotoggl import toggl_api
+from autotoggl import api
 from tests import test_common
 from tests.test_common import equal
 from tests.test_credentials import (
