@@ -277,16 +277,17 @@ class Classifier:
         self.description = json_data.get('description')
         self.description_pattern = json_data.get('description_pattern', [])
         self.window_contains = json_data.get('window_contains', [])
+        self.project_alias = json_data.get('alias', {})
 
     def get_project(self, window_title):
         if self.project_pattern:
             m = re.match(self.project_pattern, window_title)
             if m:
-                return m.group(1)
+                return self._alias(m.group(1))
 
         for x in self.window_contains:
             if x in window_title.lower():
-                return self.project_title
+                return self._alias(self.project_title)
 
     def get_description(self, window_title):
         for p in self.description_pattern:
@@ -300,6 +301,15 @@ class Classifier:
                     return x
 
                 return self.description
+
+    def _alias(self, project):
+        '''
+        If projectname  has an alias registered then return that instead,
+        otherwise return the original project name
+        '''
+        return (self.project_alias[project]
+                if project in self.project_alias
+                else project)
 
     def as_json(self):
         return {
