@@ -189,13 +189,13 @@ def test_project_definitions():
     result = classifiers['sublime_text'].get(sublimetext)
     equal(result.project, 'auto-toggl')
     equal(result.description, 'autotoggl.py')
-    equal(result.tags, [])
+    equal(result.tags, ['py'])
 
     # As above, but replace project name with an alias
     result = classifiers['sublime_text'].get(sublimetext_with_alias)
     equal(result.project, 'Home Assistant')  # 'gassistant' -> 'Home Assistant'
     equal(result.description, 'settings.py')
-    equal(result.tags, [])
+    equal(result.tags, ['py'])
 
     # Project and description are parsed using regex patterns
     result = classifiers['studio64'].get(studio64)
@@ -272,6 +272,9 @@ def test_config():
         'render': False,
         'reset': False,
         'showall': False,
+        'clean': False,
+        'clean_before': False,
+        'clean_older_than': None,
     }
     # Test parsing of date with partial year
     config = Config(json_data=file_config, clargs=Bunch(clargs))
@@ -335,3 +338,14 @@ def test_db_consume():
                 0)
 
     os.remove(autotoggl.DB_PATH)
+
+
+def test_get_total_duration():
+    events = [
+        autotoggl.Event(duration=20),
+        autotoggl.Event(duration=123),
+        autotoggl.Event(duration=456),
+    ]
+    equal(
+        autotoggl.get_total_duration(events),
+        599)
