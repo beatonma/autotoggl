@@ -311,7 +311,7 @@ def main():
         events = compress_events(events, config)
 
         events, projects = categorise_events(
-            events, config.project_definitions)
+            events, config.classifiers)
 
         if config.showall:
             print_events(
