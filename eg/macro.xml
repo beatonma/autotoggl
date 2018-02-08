@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<EventGhost Version="1722">
+    <Folder Name="AutoToggl" Expanded="True">
+        <Macro Name="Python Script: Log window focus for Toggl" Expanded="True">
+            <Event Name="Task.Activated.*" />
+            <Event Name="Main.OnInitAfterBoot" />
+            <Event Name="Main.OnClose" />
+            <Event Name="System.Idle" />
+            <Event Name="System.UnIdle" />
+            <Event Name="System.SessionLock" />
+            <Event Name="System.SessionUnlock" />
+            <Event Name="System.Resume" />
+            <Event Name="System.Suspend" />
+            <Event Name="System.AwayMode.Entering" />
+            <Event Name="System.AwayMode.Exiting" />
+            <Event Name="System.SessionLogon" />
+            <Event Name="System.SessionLogoff" />
+            <Event Name="System.OnEndSession" />
+            <Action Name="Python Script: Log window activation">
+                EventGhost.PythonScript(u"'''\nThis script is run by python2 in EventGhost\n'''\n\nimport eg\nimport os\nimport sqlite3\nimport time\n\nfrom win32gui import GetForegroundWindow, GetWindowText\n\nDB_PATH = os.path.expanduser('~/autotoggl/toggl.db')\n\nSYSTEM_EVENTS = [\n    'System.SessionLock',\n    'System.SessionUnlock',\n    'System.Idle',\n    'System.UnIdle',\n    'Main.OnInitAfterBoot',\n    'Main.OnClose',\n    'System.Resume',\n    'System.Suspend',\n    'System.AwayMode.Entering',\n    'System.AwayMode.Exiting',\n    'System.SessionLogon',\n    'System.SessionLoggoff',\n    'System.OnEndSession',\n]\nIGNORE_PROCESSES = [\n    'explorer',\n    'powershell',\n    'ShellExperienceHost',\n    'SearchUI',\n    'OpenWith',\n    'LockApp',\n    'Desktop',\n    'ApplicationFrameHost',\n]\nPROCESS_WHITELIST = [\n    \n]\n\n\ndef _init_db():\n    exists = False\n    if os.path.exists(DB_PATH):\n        exists = True\n    else:\n        try:\n            os.makedirs(os.path.dirname(DB_PATH))\n            print('Created autotoggl directory: {}'.format(DB_PATH))\n        except:\n            print('Unable to make directory {}'.format(DB_PATH))\n    conn = sqlite3.connect(DB_PATH)\n    cursor = conn.cursor()\n    if exists:\n        return conn, cursor\n\n    sql = '''CREATE TABLE toggl\n             (process_name TEXT NOT NULL,\n              window_title TEXT NOT NULL,\n              start INTEGER NOT NULL,\n              consumed BOOLEAN NOT NULL DEFAULT 0)'''\n    cursor.execute(sql)\n    return conn, cursor\n\n\ndef _add(cursor, process_name, window_title):\n    print(process_name, window_title)\n    sql = '''INSERT INTO toggl VALUES (?, ?, ?, ?)'''\n    cursor.execute(\n        sql,\n        (\n            process_name,\n            window_title,\n            int(time.time()),\n            False\n        )\n    )\n\n\n# Main\nevent_name = eg.event.string\n\nif event_name in SYSTEM_EVENTS:\n    title = '__SYS__'\n    process_name = event_name\nelse:\n    title = unicode(GetWindowText(GetForegroundWindow()).decode(\n        'windows-1250', 'ignore'))\n    process_name = unicode(event_name.split('.')[-1].decode(\n        'windows-1250', 'ignore'))\n\nif not title:\n    # Ignore windows with empty titles\n    raise SystemExit()\n\nif process_name in IGNORE_PROCESSES:\n    # Ignore unwanted processes\n    raise SystemExit()\n\nif PROCESS_WHITELIST and process_name not in PROCESS_WHITELIST:\n    # Ignore process that is not whitelisted\n    raise SystemExit()\n\nconn, cursor = _init_db()\ntry:\n    _add(cursor, process_name, title)\n    conn.commit()\nexcept Exception as e:\n    print(e)\ncursor.close()\nconn.close()\n")
+            </Action>
+        </Macro>
+    </Folder>
+</EventGhost>
