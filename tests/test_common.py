@@ -1,6 +1,5 @@
 import json
 import logging
-import unittest
 
 from autotoggl.config import Config
 from tests.test_credentials import (
