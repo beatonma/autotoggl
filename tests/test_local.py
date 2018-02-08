@@ -139,16 +139,20 @@ def test_compress_events(events=None, config=None):
     render_events(events)
 
 
-def test_project_definitions(config=None):
+def test_categorise_event():
+    '''
+    Confirm that categorise_event returns the correct project name,
+    and correctly updates the given Event object
+    '''
     config = test_common.get_test_config()
 
     # Test basic project name via window_contains
     equal(
         autotoggl.categorise_event(
             autotoggl.Event(**{
-                'title': 'Duolingo',
-                'process': 'chrome'
-            }),
+                    'title': 'Duolingo',
+                    'process': 'chrome'
+                }),
             config.defs()),
         'Duolingo')
 
@@ -162,18 +166,7 @@ def test_project_definitions(config=None):
             config.defs()),
         'auto-toggl')
 
-    # Test basic project name via pattern-matching
-    equal(
-        autotoggl.categorise_event(
-            autotoggl.Event(**{
-                'title': 'LEDControl - [/path/to/proj] - File.java - Android Studio 3.0',
-                'process': 'studio64'
-            }),
-            config.defs()),
-        'LEDControl')
-
-    # Confirm that categorise_event correctly parses project and description
-    # and adds those data to the original event object
+    # Test that categorise_event correctly updates the original Event object
     event = autotoggl.Event(**{
         'title': 'LEDControl - [/path/to/proj] - File.java - Android Studio 3.0',
         'process': 'studio64'
@@ -181,51 +174,77 @@ def test_project_definitions(config=None):
     autotoggl.categorise_event(event, config.defs())
     equal(event.project, 'LEDControl')
     equal(event.description, 'File.java')
+    equal(event.tags, ['android', 'dev'])
 
-    # Test project and description via window_contains
-    event = autotoggl.Event(**{
-            'title': 'Duolingo',
-            'process': 'chrome'
-        })
-    autotoggl.categorise_event(event, config.defs())
-    equal(event.project, 'Duolingo')
-    equal(event.description, 'German practice')
 
-    # Test project and description via window_contains
-    # (neither project nor description present in event title)
-    event = autotoggl.Event(**{
-            'title': 'StarCraft on Twitch',
-            'process': 'chrome'
-        })
-    autotoggl.categorise_event(event, config.defs())
-    equal(event.project, 'Casual')
-    equal(event.description, 'Internetting')
+def test_project_definitions():
+    '''
+    Confirm that Classifier.get() constructs the correct result
+    '''
+    config = test_common.get_test_config()
+    classifiers = config.classifiers
 
-    # Test description pattern-matching
-    event = autotoggl.Event(**{
-            'title': 'BBC iPlayer - Requiem - Series 1: Episode 1',
-            'process': 'chrome'
-        })
-    autotoggl.categorise_event(event, config.defs())
-    equal(event.project, 'Casual')
-    equal(event.description, 'Requiem - Series 1: Episode 1')
+    # Window titles
+    sublimetext = '../auto-toggl/autotoggl.py (auto-toggl) - Sublime Text'
+    sublimetext_with_alias = '../../settings.py (gassistant) - Sublime Text'
+    studio64 = 'ProjectName - [/path/to/proj] - File.java - Android Studio 3.0'
+    chrome_reddit = 'reddit: the front page of the internet'
+    chrome_iplayer = 'BBC iPlayer - Requiem - Series 1: Episode 1'
+    chrome_netflix = 'Netflix'
 
-    # Test description special value '_'
-    event = autotoggl.Event(**{
-            'title': 'Netflix',
-            'process': 'chrome'
-        })
-    autotoggl.categorise_event(event, config.defs())
-    equal(event.project, 'Casual')
-    equal(event.description, 'netflix')
+    # Project and description are parsed using regex patterns
+    result = classifiers['sublime_text'].get(sublimetext)
+    equal(result.project, 'auto-toggl')
+    equal(result.description, 'autotoggl.py')
+    equal(result.tags, [])
 
-    # Test project alias
-    event = autotoggl.Event(**{
-            'title': '/path/to/project (gassistant) - Sublime Text',
-            'process': 'sublime_text'
-        })
-    autotoggl.categorise_event(event, config.defs())
-    equal(event.project, 'Home Assistant')
+    # As above, but replace project name with an alias
+    result = classifiers['sublime_text'].get(sublimetext_with_alias)
+    equal(result.project, 'Home Assistant')  # 'gassistant' -> 'Home Assistant'
+    equal(result.description, 'settings.py')
+    equal(result.tags, [])
+
+    # Project and description are parsed using regex patterns
+    result = classifiers['studio64'].get(studio64)
+    equal(result.project, 'ProjectName')
+    equal(result.description, 'File.java')
+    equal(result.tags, ['android', 'dev'])
+
+    ###
+
+    # Chrome process uses 'projects' list of subclassifiers and
+    # primarily uses 'window_contains' to match windows with projects
+
+    result = classifiers['chrome'].get(chrome_reddit)
+
+    # Static project name found using window_contains
+    equal(result.project, 'Casual')
+
+    # Static description found using window_contains
+    equal(result.description, 'Internetting')
+
+    # Combines tags from both parent and child classifiers
+    # 'reddit' replaces '_' special value in child
+    # 'chrome' is a static tag from the parent ProcessClassifier
+    equal(result.tags, ['reddit', 'chrome'])
+
+    ###
+
+    result = classifiers['chrome'].get(chrome_iplayer)
+    equal(result.project, 'Casual')
+
+    # Description parsed using regex pattern
+    equal(result.description, 'Requiem - Series 1: Episode 1')
+    equal(result.tags, ['chrome'])
+
+    ###
+
+    result = classifiers['chrome'].get(chrome_netflix)
+    equal(result.project, 'Casual')
+
+    # 'netflix' replaces '_' special value
+    equal(result.description, 'netflix')
+    equal(result.tags, ['chrome'])
 
 
 def test_config():
