@@ -1,11 +1,9 @@
 import datetime
 import os
 import random
-import sqlite3
 
 from datetime import timedelta
 
-import autotoggl.api as api
 import autotoggl.autotoggl as autotoggl
 
 from autotoggl.config import Config
@@ -149,28 +147,23 @@ def test_categorise_event():
     # Test basic project name via window_contains
     equal(
         autotoggl.categorise_event(
-            autotoggl.Event(**{
-                    'title': 'Duolingo',
-                    'process': 'chrome'
-                }),
+            autotoggl.Event(title='Duolingo', process='chrome'),
             config.defs()),
         'Duolingo')
 
     # Test basic project name via pattern-matching
     equal(
         autotoggl.categorise_event(
-            autotoggl.Event(**{
-                'title': '/auto-toggl/main.py (auto-toggl) - Sublime Text',
-                'process': 'sublime_text'
-            }),
+            autotoggl.Event(
+                title='/auto-toggl/main.py (auto-toggl) - Sublime Text',
+                process='sublime_text'),
             config.defs()),
         'auto-toggl')
 
     # Test that categorise_event correctly updates the original Event object
-    event = autotoggl.Event(**{
-        'title': 'LEDControl - [/path/to/proj] - File.java - Android Studio 3.0',
-        'process': 'studio64'
-    })
+    event = autotoggl.Event(
+        title='LEDControl - [/path/to/proj] - File.java - Android Studio 3.0',
+        process='studio64')
     autotoggl.categorise_event(event, config.defs())
     equal(event.project, 'LEDControl')
     equal(event.description, 'File.java')
