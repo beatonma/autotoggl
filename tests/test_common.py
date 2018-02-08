@@ -64,20 +64,25 @@ def get_test_config():
 
                 # If this pattern matches, the first group will be used
                 # as the event description
-                'description_pattern': ['(.*?) . \\(.*?\\) - Sublime Text.*'],
+                'description_pattern': [
+                    '.*?([\\w\\d\\-]+\\.[\\w\\d\\-]+) .*?\\(.*?\\) - Sublime Text.*'
+                ],
             },
             {
                 'process': 'studio64',
                 'project_pattern': '(.*?) - \\[.*\\].*',
                 'description_pattern': ['.*? - \\[.*?\\] - (.*?) - .*'],
 
-                # TODO implement tags
                 'tags': [
-
-                ]
+                    'android',
+                    'dev'
+                ],
             },
             {
                 'process': 'chrome',
+                'tags': [
+                    'chrome',
+                ],
                 'projects': [
                     # List of projects that might match this process
                     {
@@ -90,6 +95,9 @@ def get_test_config():
                         # found in the window title then this will
                         # be the event description
                         'description': 'German practice',
+                        'tags': [
+                            'language',
+                        ],
 
                         'window_contains': [
                             'duolingo',
@@ -103,7 +111,9 @@ def get_test_config():
                         # the first group will provide the event
                         # description. If there is no match, the value
                         # of `description` will be returned
-                        'description_pattern': [],
+                        'tags': [
+                            '_',
+                        ],
                         'window_contains': [
                             'guardian'
                             'news',
