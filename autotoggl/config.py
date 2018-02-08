@@ -37,6 +37,7 @@ class Config:
         self.render = False
         self.reset = False
         self.showall = False
+        self.clean = False
 
         if file:
             self._load_from_file(file)
@@ -154,6 +155,25 @@ class Config:
                 help='Show all events for the given day without any '
                      'filtering')
 
+            subparsers = parser.add_subparsers(dest='ns')
+            cleanup_parser = subparsers.add_parser('clean')
+            cleanup_parser.add_argument(
+                '-before',
+                action='store_true',
+                help='Remove any entries before --date')
+            cleanup_parser.add_argument(
+                '--older_than',
+                type=int,
+                default=2,
+                help='Remove any entries that are at least this many '
+                     'days old',
+                )
+            cleanup_parser.add_argument(
+                '-all',
+                action='store_true',
+                help='Remove entries even if they have not been consumed',
+                )
+
             args = parser.parse_args()
 
         if not args:
@@ -176,6 +196,14 @@ class Config:
         self.render = args.render
         self.reset = args.reset
         self.showall = args.showall
+
+        self.clean = None
+        if args.ns == 'clean':
+            self.clean = {
+                'before': args.before,
+                'older_than': args.older_than,
+                'all': args.all,
+            }
 
     def _process_args(self):
         if self.date:
@@ -201,6 +229,9 @@ class Config:
         self.day_starts = self.date.replace(
             hour=self.day_ends_at, minute=0, second=0, microsecond=0)
         self.day_ends = self.day_starts + timedelta(days=1)
+
+        if self.clean and self.clean['before']:
+            self.clean['before'] = self.date
 
         if self.default_workspace:
             # Try to parse given workspace as an integer ID
@@ -237,6 +268,7 @@ class Config:
             'render': self.render,
             'reset': self.reset,
             'showall': self.showall,
+            'clean': self.clean,
         }
 
     def _create_example_file(self, filename):
@@ -318,22 +350,20 @@ class Classifier:
         self.window_contains = json_data.get('window_contains', [])
         self.project_alias = json_data.get('alias', {})
         self.tags = json_data.get('tags', [])
+        self.tag_pattern = json_data.get('tag_pattern', [])
 
     def get(self, window_title):
         project = None
         description = None
-        tags = self.tags
+        tags = self.tags[:]
 
         if self.project_pattern:
-            m = re.match(self.project_pattern, window_title)
-            if m:
-                project = m.group(1)
-
-        for p in self.description_pattern:
-            m = re.match(p, window_title)
-            if m:
-                description = m.group(1)
-                break
+            project = self._match_patterns(
+                [self.project_pattern], window_title)
+        description = self._match_patterns(
+            self.description_pattern, window_title)
+        tags += self._match_multi_patterns(
+            self.tag_pattern, window_title)
 
         for x in self.window_contains:
             if x in window_title.lower():
@@ -350,11 +380,33 @@ class Classifier:
         if not self.description_pattern and not self.window_contains:
             description = self.description
 
+        tags = list(set(tags))  # Remove any duplicates
+
         if project:
             return ClassifierResult(
                 project=self._alias(project),
                 description=description,
                 tags=tags)
+
+    def _match_patterns(self, patterns, text) -> str:
+        '''
+        Get the first matching group
+        '''
+        for p in patterns:
+            m = re.match(p, text)
+            if m:
+                return m.group(1)
+
+    def _match_multi_patterns(self, patterns, text) -> list:
+        '''
+        Return the first matching group for multiple patterns
+        '''
+        results = []
+        for p in patterns:
+            m = re.match(p, text)
+            if m:
+                results.append(m.group(1))
+        return results
 
     def _alias(self, projectname):
         '''
@@ -373,6 +425,7 @@ class Classifier:
             'description_pattern': self.description_pattern,
             'window_contains': self.window_contains,
             'tags': self.tags,
+            'tag_pattern': self.tag_pattern,
         }
 
 
