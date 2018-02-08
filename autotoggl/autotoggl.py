@@ -10,6 +10,7 @@ from datetime import timedelta
 
 from autotoggl.config import Config
 from autotoggl.api import TogglApiInterface, ApiError
+from autotoggl.util import midnight
 
 BASE_DIR = os.path.expanduser('~/autotoggl/')
 DB_PATH = os.path.join(BASE_DIR, 'toggl.db')
@@ -85,8 +86,30 @@ class DatabaseManager:
                 'Unable to execute query {args}: {err}'
                 .format(args=args, err=e))
 
-    def clean_up(self, consumed_only=True, older_than=timedelta(days=2)):
-        pass
+    def clean_up(self, **kwargs):
+        clear_all = kwargs.get('all', False)
+        older_than_days = kwargs.get('older_than', 2)
+        before = kwargs.get('before')
+
+        if not before:
+            before = midnight(datetime.datetime.now()
+                              - timedelta(days=older_than_days))
+
+        logger.warn('Removing events before {}'.format(before.isoformat()))
+        before_timestamp = before.timestamp()
+        if clear_all:
+            sql = '''DELETE FROM toggl
+                     WHERE start<?'''
+            self.exec(sql, (before_timestamp,))
+        else:
+            sql = '''DELETE FROM toggl
+                     WHERE start<? AND consumed=?'''
+            self.exec(sql, (before_timestamp, True))
+
+        changes = self.exec('''SELECT changes()''').fetchone()[0]
+
+        self.exec('''VACUUM''')  # Free up space
+        logger.info('Deleted {} events'.format(changes))
 
     def consume(self, events):
         '''
@@ -253,6 +276,10 @@ def compress_events(events, config):
     return list(filter(lambda x: x.duration, events))
 
 
+def get_total_duration(events):
+    return sum([e.duration for e in events])
+
+
 def print_events(events, starts, ends):
     logger.info(
         'Events from {} -> {}'
@@ -298,6 +325,10 @@ def main():
     with DatabaseManager() as db:
         config = load_config()
 
+        if config.clean:
+            db.clean_up(**config.clean)
+            return
+
         if config.reset:
             db.reset(config.day_starts, config.day_ends)
             logger.info(
@@ -325,17 +356,17 @@ def main():
             logger.info('Building preview HTML...')
             autotoggl.render.render_events(events)
 
-        # pending_submission = sum([len(es) for _, es in projects.items()])
         pending_submission = 0
         for p in projects:
             n_total_events = len(projects[p])
             projects[p] = [e for e in projects[p] if not e.consumed]
             n_pending_events = len(projects[p])
             logger.info(
-                'Project \'{project}\': {pending} events '
+                'Project \'{project}\': [{duration}] {pending} events '
                 '({consumed} already consumed)'
                 .format(
                     project=p,
+                    duration=timedelta(seconds=get_total_duration(projects[p])),
                     pending=n_pending_events,
                     consumed=n_total_events - n_pending_events))
             pending_submission += n_pending_events

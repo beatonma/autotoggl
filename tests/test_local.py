@@ -272,9 +272,8 @@ def test_config():
         'render': False,
         'reset': False,
         'showall': False,
-        'clean': False,
-        'clean_before': False,
-        'clean_older_than': None,
+        'clean': None,
+        'ns': None,
     }
     # Test parsing of date with partial year
     config = Config(json_data=file_config, clargs=Bunch(clargs))
