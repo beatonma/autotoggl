@@ -36,9 +36,11 @@ def _test_api_create_project(interface):
 def _test_api_create_time_entry(interface, pid):
     interface.create_time_entry(
         pid,
+        'This is a description',
         (datetime.now(timezone.utc).astimezone() - timedelta(hours=1))
         .replace(microsecond=0).timestamp(),
-        120
+        120,
+        tags=['tag1', 'tag2']
     )
 
 
