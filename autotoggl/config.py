@@ -28,7 +28,7 @@ class Config:
 
         self.api_key = None
         self.default_workspace = None
-        self.project_definitions = {}
+        self.classifiers = {}
         self.default_day = None
         self.minimum_event_seconds = None
         self.day_ends_at = None
@@ -48,7 +48,7 @@ class Config:
         self._validate_config()
 
     def defs(self):
-        return self.project_definitions
+        return self.classifiers
 
     def _load_from_file(self, filename):
         if not os.path.exists(filename):
@@ -68,7 +68,7 @@ class Config:
         for x in config.get('project_definitions', []):
             defs[x['process']] = ProcessClassifier(x)
 
-        self.project_definitions = defs
+        self.classifiers = defs
 
         self.api_key = config.get('api_key')
 
@@ -231,7 +231,7 @@ class Config:
             'day_ends_at': self.day_ends_at,
             'date': int(self.date.timestamp()),
             'project_definitions': [
-                x.as_json() for _, x in self.project_definitions.items()
+                x.as_json() for _, x in self.classifiers.items()
             ],
             'local': self.local,
             'render': self.render,
@@ -304,9 +304,10 @@ class Classifier:
     # value will be used as the description value
     # e.g.
     # description: '_',
+    # tags: ['_'],
     # window_contains: ['netflix', 'iplayer']
     # -> If the window title contains 'netflix' then the description
-    #    will be set to 'netflix'
+    #    will be set to 'netflix' and a 'netflix' tag will be added
     USE_MATCH = '_'
 
     def __init__(self, json_data):
@@ -319,45 +320,50 @@ class Classifier:
         self.tags = json_data.get('tags', [])
 
     def get(self, window_title):
-        # TODO replace get_project, get_description to reduce searches
         project = None
         description = None
-        tags = []
+        tags = self.tags
 
-    def get_project(self, window_title):
         if self.project_pattern:
             m = re.match(self.project_pattern, window_title)
             if m:
-                return self._alias(m.group(1))
+                project = m.group(1)
 
-        for x in self.window_contains:
-            if x in window_title.lower():
-                return self._alias(self.project_title)
-
-        if not self.project_pattern and not self.window_contains:
-            return self.project_title
-
-    def get_description(self, window_title):
         for p in self.description_pattern:
             m = re.match(p, window_title)
             if m:
-                return m.group(1)
+                description = m.group(1)
+                break
 
         for x in self.window_contains:
             if x in window_title.lower():
-                if self.description == Classifier.USE_MATCH:
-                    return x
+                project = project or self.project_title
+                description = description or self.description
+                if description == Classifier.USE_MATCH:
+                    description = x
+                tags = [x if t == Classifier.USE_MATCH else t for t in tags]
+                break
 
-                return self.description
+        if not self.project_pattern and not self.window_contains:
+            project = self.project_title
 
-    def _alias(self, project):
+        if not self.description_pattern and not self.window_contains:
+            description = self.description
+
+        if project:
+            return ClassifierResult(
+                project=self._alias(project),
+                description=description,
+                tags=tags)
+
+    def _alias(self, projectname):
         '''
         If projectname  has an alias registered then return that instead,
         otherwise return the original project name
         '''
-        return (self.project_alias[project]
-                if project in self.project_alias
-                else project)
+        return (self.project_alias[projectname]
+                if projectname in self.project_alias
+                else projectname)
 
     def as_json(self):
         return {
@@ -366,6 +372,7 @@ class Classifier:
             'description': self.description,
             'description_pattern': self.description_pattern,
             'window_contains': self.window_contains,
+            'tags': self.tags,
         }
 
 
@@ -381,7 +388,7 @@ class ProcessClassifier(Classifier):
     '''
     Implementation of Classifier with added fields
     for a process name and a list of Projects
-    Represents an item in the Config.project_definitions list
+    Represents an item in the Config.classifiers list
     '''
     def __init__(self, json_data):
         super().__init__(json_data)
@@ -389,21 +396,18 @@ class ProcessClassifier(Classifier):
         self.process = json_data.get('process')
         self.projects = [Project(x) for x in json_data.get('projects', [])]
 
-    def get_project(self, window_title):
+    def get(self, window_title):
+        result = None
         for x in self.projects:
-            p = x.get_project(window_title)
-            if p:
-                return p
+            result = x.get(window_title)
+            if result:
+                break
 
-        return super().get_project(window_title)
+        if result:
+            result.tags += self.tags
+            return result
 
-    def get_description(self, window_title):
-        for x in self.projects:
-            d = x.get_description(window_title)
-            if d:
-                return d
-
-        return super().get_description(window_title)
+        return super().get(window_title)
 
     def __repr__(self):
         return json.dumps(

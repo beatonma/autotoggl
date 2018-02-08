@@ -177,13 +177,12 @@ def categorise_event(event, definitions):
 
     process_classifier = definitions.get(process, None)
     if process_classifier:
-        project = process_classifier.get_project(title)
-        event.description = process_classifier.get_description(title)
-        event.tags = process_classifier.tags
-
-        if project:
-            event.project = project
-            return project
+        result = process_classifier.get(title)
+        if result:
+            event.project = result.project
+            event.description = result.description
+            event.tags = result.tags
+            return result.project
 
     return None
 
