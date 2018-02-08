@@ -1,5 +1,6 @@
 import json
 import logging
+import unittest
 
 from autotoggl.config import Config
 from tests.test_credentials import (
@@ -21,7 +22,12 @@ logger = get_logger()
 
 def equal(actual, expected, comment='', data=None):
     try:
-        assert(expected == actual)
+        if type(expected) is list:
+            assert(len(expected) == len(actual))
+            assert(sorted(expected) == sorted(actual))
+        else:
+            assert(expected == actual)
+
         logger.info(
             '[EQUAL]{} {}'.format(
                 ' (' + comment + ')' if comment else '',
@@ -67,6 +73,10 @@ def get_test_config():
                 'description_pattern': [
                     '.*?([\\w\\d\\-]+\\.[\\w\\d\\-]+) .*?\\(.*?\\) - Sublime Text.*'
                 ],
+
+                'tag_pattern': [
+                    '.*?[\\w\\d\\-]+\\.([\\w\\d\\-]+) .*?\\(.*?\\) - Sublime Text.*'
+                ]
             },
             {
                 'process': 'studio64',
