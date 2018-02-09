@@ -75,8 +75,6 @@ class TogglApiInterface:
         '''
         Try to get an integer workspace id.
         '''
-        # if not self.default_workspace:
-        #     return
 
         if type(self.default_workspace) is int:
             return
