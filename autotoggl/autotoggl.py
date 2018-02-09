@@ -1,4 +1,5 @@
 import datetime
+import json
 import logging
 import os
 import sqlite3
@@ -7,6 +8,7 @@ import time
 import autotoggl.render
 
 from datetime import timedelta
+from typing import Dict, List, Tuple
 
 from autotoggl.config import Config
 from autotoggl.api import TogglApiInterface, ApiError
@@ -21,7 +23,7 @@ CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
 EVENT_SYSTEM = '__SYS__'
 
 
-def _init_logger(name=__file__, level=logging.DEBUG):
+def _init_logger(name=__file__, level=logging.DEBUG) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(level)
     logger.addHandler(logging.StreamHandler())
@@ -29,6 +31,30 @@ def _init_logger(name=__file__, level=logging.DEBUG):
 
 
 logger = _init_logger()
+
+
+class Event:
+    def __init__(self, **kwargs):
+        self.id = kwargs.get('id')
+        self.process = kwargs.get('process')
+        self.title = kwargs.get('title')
+        self.start = kwargs.get('start')
+        self.consumed = kwargs.get('consumed', False)
+        self.project = kwargs.get('project')
+        self.tags = kwargs.get('tags', [])
+        self.description = kwargs.get('description')
+
+        self.duration = kwargs.get('duration', 0)
+
+        self.merged = []
+
+    def merge(self, other) -> None:
+        self.duration += other.duration
+        other.duration = 0
+        self.merged.append(other.id)
+
+    def __repr__(self):
+        return json.dumps(self.__dict__, indent=2, sort_keys=True)
 
 
 class DatabaseManager:
@@ -45,7 +71,7 @@ class DatabaseManager:
     def __exit__(self, ctx_type, ctx_value, ctx_traceback):
         self.close(commit=True)
 
-    def _create(self, filename):
+    def _create(self, filename) -> None:
         logger.info('Creating database {}'.format(filename))
         dirname = os.path.dirname(filename)
         if not os.path.exists(dirname):
@@ -64,7 +90,7 @@ class DatabaseManager:
         conn.commit()
         conn.close()
 
-    def close(self, commit=True):
+    def close(self, commit=True) -> None:
         if not self.alive:
             raise Exception(
                 'Database connection has already been closed.')
@@ -74,7 +100,7 @@ class DatabaseManager:
         self.conn.close()
         self.alive = False
 
-    def exec(self, *args):
+    def exec(self, *args) -> sqlite3.Cursor:
         if not self.alive:
             raise Exception(
                 'Cannot execute query: database connection '
@@ -86,7 +112,7 @@ class DatabaseManager:
                 'Unable to execute query {args}: {err}'
                 .format(args=args, err=e))
 
-    def clean_up(self, **kwargs):
+    def clean_up(self, **kwargs) -> None:
         clear_all = kwargs.get('all', False)
         older_than_days = kwargs.get('older_than', 2)
         before = kwargs.get('before')
@@ -111,7 +137,7 @@ class DatabaseManager:
         self.exec('''VACUUM''')  # Free up space
         logger.info('Deleted {} events'.format(changes))
 
-    def consume(self, events):
+    def consume(self, events) -> None:
         '''
         Mark the given events (and any events merged with them) as consumed,
         meaning they have been submitted to Toggl successfully
@@ -125,7 +151,7 @@ class DatabaseManager:
         for rowid in ids:
             self.exec(sql, (True, rowid))
 
-    def get_events(self, start_datetime, end_datetime):
+    def get_events(self, start_datetime, end_datetime) -> List[Event]:
         c = self.exec(
             '''SELECT rowid, process_name, window_title, start, consumed
                FROM toggl
@@ -140,7 +166,7 @@ class DatabaseManager:
                 consumed=bool(r[4]),
             ) for r in c.fetchall()]
 
-    def reset(self, start_datetime, end_datetime):
+    def reset(self, start_datetime, end_datetime) -> None:
         sql = '''UPDATE toggl
                  SET consumed=?
                  WHERE start>=? AND start<=?'''
@@ -149,39 +175,11 @@ class DatabaseManager:
             (False, start_datetime.timestamp(), end_datetime.timestamp()))
 
 
-class Event:
-    def __init__(self, **kwargs):
-        self.id = kwargs.get('id')
-        self.process = kwargs.get('process')
-        self.title = kwargs.get('title')
-        self.start = kwargs.get('start')
-        self.consumed = kwargs.get('consumed', False)
-        self.project = kwargs.get('project')
-        self.tags = kwargs.get('tags', [])
-        self.description = kwargs.get('description')
-
-        self.duration = kwargs.get('duration', 0)
-
-        self.merged = []
-
-    def merge(self, other):
-        self.duration += other.duration
-        other.duration = 0
-        self.merged.append(other.id)
-
-    def __repr__(self):
-        return '[{}] {} {} {} {} ({})'.format(
-            self.project, self.process,
-            datetime.datetime.fromtimestamp(self.start).isoformat(),
-            self.consumed,
-            self.tags, self.description)
-
-
-def load_config():
+def load_config() -> Config:
     return Config(CONFIG_FILE)
 
 
-def get_events_for_date(db, date, day_ends_at=3):
+def get_events_for_date(db, date, day_ends_at=3) -> List[Event]:
     date_starts = date.replace(
         hour=day_ends_at, minute=0, second=0, microsecond=0)
     date_ends = date_starts + timedelta(days=1)
@@ -191,7 +189,7 @@ def get_events_for_date(db, date, day_ends_at=3):
     return db.get_events(date_starts, date_ends)
 
 
-def categorise_event(event, definitions):
+def categorise_event(event, definitions) -> str:
     '''
     If we recognise the window title, try to parse a project name from it
     '''
@@ -210,37 +208,40 @@ def categorise_event(event, definitions):
     return None
 
 
-def categorise_events(events, definitions):
-    '''
-    Build a dictionary of projects
-    {
-        project_name: [events_list,]
-    }
-    '''
+def categorise_events(events, definitions) -> None:
+    for e in events:
+        categorise_event(e, definitions)
+
+
+def build_project_dict(events) -> Dict[str, Event]:
     projects = {}
-    for x in events:
-        project = categorise_event(x, definitions)
-        if not project:
+    for e in events:
+        if not e.project:
             continue
 
-        if project in projects:
-            projects[project].append(x)
+        if e.project in projects:
+            projects[e.project].append(e)
         else:
-            projects[project] = [x]
+            projects[e.project] = [e]
 
-    # Remove events that are not assigned to any projects
-    events = list(filter(lambda x: x.project, events))
-
-    return events, projects
+    return projects
 
 
-def compress_events(events, config):
+def compress_events(events, config) -> List[Event]:
     '''
-    Remove events that are very short and squash the results.
-    If two events in series represent the same activity, the duration
-    properties of the second event will be added to the first event
-    and the second event will be removed from the events list
-    TODO smarter handling of system events: pause/resume events
+    'Squash' the events list into as few event objects as possible..
+
+    Squashing the results means:
+        - If an event is very short, merge it with the ongoing event. If
+          there is no ongoing event then ignore it.
+
+        - If two events in series represent the same activity, the duration
+          properties of the second event will be added to the first event
+          and the second event will be removed from the events list
+
+        - Any events that are not assigned to a project will be merged
+          into any ongoing event. If there is no event ongoing, unassigned
+          events will be ignored.
     '''
     # Ensure events are in order of occurrence
     events.sort(key=lambda x: x.start)
@@ -257,30 +258,41 @@ def compress_events(events, config):
             e.duration = 0
             continue
 
+        if not e.project:
+            # Unassigned events should be ignored at this stage
+            continue
+
         for o in events[n+1:]:
             if o.title == EVENT_SYSTEM:
-                o.duration = 0
+                # o.duration = 0
                 break
 
             if o.duration < config.minimum_event_seconds:
                 e.merge(o)
+
             elif e.title == o.title:
                 # If consecutive events have the same name then
                 # squash them into the first occurrence
                 e.merge(o)
+
+            elif not o.project:
+                # Merge unassigned events into the ongoing event
+                e.merge(o)
+
             else:
                 # Another event long enough to take over
                 break
 
     # Remove any event with 0 duration
-    return list(filter(lambda x: x.duration, events))
+    # or no project assignment
+    return list(filter(lambda x: x.duration and x.project, events))
 
 
-def get_total_duration(events):
+def get_total_duration(events) -> int:
     return sum([e.duration for e in events])
 
 
-def print_events(events, starts, ends):
+def print_events(events, starts, ends) -> None:
     logger.info(
         'Events from {} -> {}'
         .format(starts.isoformat(), ends.isoformat()))
@@ -288,7 +300,7 @@ def print_events(events, starts, ends):
         logger.info(e)
 
 
-def submit(interface, projects):
+def submit(interface, projects) -> Tuple[List[int], List[int]]:
     interface.get_all_projects()
     successful = []
     failed = []
@@ -321,7 +333,7 @@ def submit(interface, projects):
     return successful, failed
 
 
-def main():
+def main() -> None:
     with DatabaseManager() as db:
         config = load_config()
 
@@ -339,10 +351,10 @@ def main():
             return
 
         events = get_events_for_date(db, config.date, config.day_ends_at)
-        events = compress_events(events, config)
-
-        events, projects = categorise_events(
+        categorise_events(
             events, config.classifiers)
+        events = compress_events(events, config)
+        projects = build_project_dict(events)
 
         if config.showall:
             print_events(
