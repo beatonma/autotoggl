@@ -32,107 +32,144 @@ class Bunch(object):
         self.__dict__.update(adict)
 
 
-EVENTS = [
-    {'duration': 0, 'title': 'StarCraft on Reddit', 'process': 'chrome', 'start': datetime.datetime(2018, 1, 30, 10, 22).timestamp()},
-    {'duration': 0, 'title': 'Commons - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': datetime.datetime(2018, 1, 30, 10, 23, 30).timestamp()},
-    {'duration': 0, 'title': '/gdbackup/gdbackup.py (gdbackup) - Sublime Text', 'process': 'sublime_text', 'start': datetime.datetime(2018, 1, 30, 10, 23, 50).timestamp()},
-    {'duration': 0, 'title': '__SYS__', 'process': 'System.Idle', 'start': datetime.datetime(2018, 1, 30, 10, 24, 35).timestamp()},
-    {'duration': 0, 'title': 'LEDControl - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': datetime.datetime(2018, 1, 30, 10, 25, 5).timestamp()},
-    {'duration': 0, 'title': 'StarCraft on Reddit', 'process': 'chrome', 'start': datetime.datetime(2018, 1, 30, 11, 55, 5).timestamp()},
-    {'duration': 0, 'title': 'CommonsManager - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': datetime.datetime(2018, 1, 30, 11, 55, 25).timestamp()},
-    {'duration': 0, 'title': 'StarCraft on Reddit', 'process': 'chrome', 'start': datetime.datetime(2018, 1, 30, 11, 56, 10).timestamp()},
-    {'duration': 0, 'title': '/gdbackup/gdbackup.py (gdbackup) - Sublime Text', 'process': 'sublime_text', 'start': datetime.datetime(2018, 1, 30, 11, 56, 55).timestamp()},
-    {'duration': 0, 'title': '/gdbackup/gdbackup.py (gdbackup) - Sublime Text', 'process': 'sublime_text', 'start': datetime.datetime(2018, 1, 30, 11, 58, 25).timestamp()},
-    {'duration': 0, 'title': '__SYS__', 'process': 'System.SessionLock', 'start': datetime.datetime(2018, 1, 30, 12, 28, 25).timestamp()},
-    {'duration': 0, 'title': '__SYS__', 'process': 'System.SessionUnlock', 'start': datetime.datetime(2018, 1, 30, 12, 28, 55).timestamp()},
-    {'duration': 0, 'title': 'Commons - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': datetime.datetime(2018, 1, 30, 12, 30, 55).timestamp()},
-    {'duration': 0, 'title': 'Commons - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': datetime.datetime(2018, 1, 30, 14, 0, 55).timestamp()},
-    {'duration': 0, 'title': 'LEDControl - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': datetime.datetime(2018, 1, 30, 14, 1).timestamp()},
-    {'duration': 0, 'title': 'LEDControl - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': datetime.datetime(2018, 1, 30, 14, 1, 5).timestamp()},
-    {'duration': 0, 'title': '/gdbackup/gdbackup.py (gdbackup) - Sublime Text', 'process': 'sublime_text', 'start': datetime.datetime(2018, 1, 30, 14, 3, 5).timestamp()},
-    {'duration': 0, 'title': '__SYS__', 'process': 'System.UnIdle', 'start': datetime.datetime(2018, 1, 30, 14, 3, 10).timestamp()},
-    {'duration': 0, 'title': 'CommonsManager - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': datetime.datetime(2018, 1, 30, 14, 3, 15).timestamp()},
-    {'duration': 0, 'title': '/auto-toggl/main.py (auto-toggl) - Sublime Text', 'process': 'sublime_text', 'start': datetime.datetime(2018, 1, 30, 14, 3, 45).timestamp()},
-    {'duration': 0, 'title': '/gdbackup/gdbackup.py (gdbackup) - Sublime Text', 'process': 'sublime_text', 'start': datetime.datetime(2018, 1, 30, 14, 4, 30).timestamp()},
-    {'duration': 0, 'title': 'LEDControl - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': datetime.datetime(2018, 1, 30, 14, 6).timestamp()},
-    {'duration': 0, 'title': '__SYS__', 'process': 'System.UnIdle', 'start': datetime.datetime(2018, 1, 30, 14, 6, 5).timestamp()},
-    {'duration': 0, 'title': 'Politics', 'process': 'chrome', 'start': datetime.datetime(2018, 1, 30, 15, 36, 5).timestamp()},
-    {'duration': 0, 'title': 'LEDControl - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': datetime.datetime(2018, 1, 30, 15, 38, 5).timestamp()},
-]
-
-
-def generate_events(howmany=15):
-    EVENT_TYPES = [
-        ('sublime_text', '/auto-toggl/main.py (auto-toggl) - Sublime Text'),
-        ('sublime_text', '/gdbackup/gdbackup.py (gdbackup) - Sublime Text'),
-        ('studio64', 'LEDControl - [/path/to/project] - FileName.java - Android Studio 3.0.1'),
-        ('studio64', 'Commons - [/path/to/project] - FileName.java - Android Studio 3.0.1'),
-        ('studio64', 'CommonsManager - [/path/to/project] - FileName.java - Android Studio 3.0.1'),
+def generate_events():
+    EVENT_LIST = [
         ('chrome', 'reddit: the front page of the internet'),
+        ('sublime_text', '/auto-toggl/autotoggl.py (auto-toggl) - Sublime Text'),
+        ('powershell', 'Windows Powershell'),
+        ('chrome', 'Google'),
+        ('System.Idle', '__SYS__'),
+        ('System.UnIdle', '__SYS__'),
+        ('sublime_text', '/auto-toggl/autotoggl.py (auto-toggl) - Sublime Text'),
+        ('explorer', 'C:\\some\\path'),
+        ('sublime_text', '/auto-toggl/autotoggl.py (auto-toggl) - Sublime Text'),
+        ('explorer', 'C:\\some\\path'),
+        ('powershell', 'Windows Powershell'),
         ('chrome', 'Politics'),
         ('chrome', 'StarCraft on Reddit'),
         ('System.SessionLock', '__SYS__'),
         ('System.SessionUnlock', '__SYS__'),
+        ('chrome', 'beatonma (Michael Beaton) - GitHub'),
+        ('studio64', 'Commons - [/path/to/project] - File.java - Android Studio'),
+        ('explorer', 'C:\\some\\path'),
+        ('explorer', 'C:\\some\\other\\path'),
+        ('chrome', 'Google'),
         ('System.Idle', '__SYS__'),
         ('System.UnIdle', '__SYS__'),
+        ('sublime_text', '/gdbackup/gdbackup.py (gdbackup) - Sublime Text'),
+        ('System.SessionLogoff', '__SYS__'),
     ]
     EVENT_LENGTHS = [
-        2,
-        5,
-        20,
-        30,
         45,
         90,
-        60 * 2,
-        60 * 30,
-        60 * 90,
+        120,
+        900,   # 15 mins
+        1800,  # 30 mins
+        3600,  # 60 mins
+        5400,  # 90 mins
     ]
 
-    time = datetime.datetime.today().replace(hour=9, second=0, microsecond=0)
+    time = datetime.datetime(2018, 6, 12, 9)
     events = []
-    for x in range(0, howmany):
-        time = time + timedelta(seconds=random.choice(EVENT_LENGTHS))
-        e = random.choice(EVENT_TYPES)
-        events.append(
-            {
-                'process': e[0],
-                'title': e[1],
-                'start': time,
-                'duration': 0,
-            }
-        )
+    for e in EVENT_LIST:
+        process = e[0]
+        title = e[1]
+        if title == '__SYS__':
+            delta = random.choice(EVENT_LENGTHS[:3])
+        else:
+            delta = random.choice(EVENT_LENGTHS)
+        time = time + timedelta(seconds=delta)
+        ev = {
+            'process': process,
+            'title': title,
+            'start': time,
+        }
+        print('{},'.format(ev))
+        events.append(ev)
 
-    for x in events:
-        print('{},'.format(x))
     return events
 
 
-def test_compress_events(events=None, config=None):
-    if not config:
-        config = test_common.get_test_config()
-    if not events:
-        events = [autotoggl.Event(**x) for x in EVENTS]
-
-    events = autotoggl.compress_events(events, config)
-    for e in events:
-        autotoggl.categorise_event(e, config.defs())
-
-    EXPECTED_VALUES = [
-        {'duration': 155, 'title': 'StarCraft on Reddit', 'process': 'chrome', 'start': '10:22:00'},
-        {'duration': 5510, 'title': 'LEDControl - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': '10:25:05'},
-        {'duration': 1890, 'title': '/gdbackup/gdbackup.py (gdbackup) - Sublime Text', 'process': 'sublime_text', 'start': '11:56:55'},
-        {'duration': 5410, 'title': 'Commons - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': '12:30:55'},
-        {'duration': 125, 'title': 'LEDControl - [/path/to/project] - FileName.java - Android Studio 3.0.1', 'process': 'studio64', 'start': '14:01:05'},
-        {'duration': 95, 'title': '/gdbackup/gdbackup.py (gdbackup) - Sublime Text', 'process': 'sublime_text', 'start': '14:04:30'},
-        {'duration': 120, 'title': 'Politics', 'process': 'chrome', 'start': '15:36:05'},
+def test_compress_events():
+    test_events = [
+        {'process': 'chrome', 'title': 'reddit: the front page of the internet', 'start': int(datetime.datetime(2018, 6, 12, 10, 30).timestamp())},
+        {'process': 'sublime_text', 'title': '/auto-toggl/autotoggl.py (auto-toggl) - Sublime Text', 'start': int(datetime.datetime(2018, 6, 12, 11, 30).timestamp())},
+        {'process': 'powershell', 'title': 'Windows Powershell', 'start': int(datetime.datetime(2018, 6, 12, 13, 0).timestamp())},
+        {'process': 'chrome', 'title': 'Google', 'start': int(datetime.datetime(2018, 6, 12, 14, 0).timestamp())},
+        {'process': 'System.Idle', 'title': '__SYS__', 'start': int(datetime.datetime(2018, 6, 12, 14, 1, 30).timestamp())},
+        {'process': 'System.UnIdle', 'title': '__SYS__', 'start': int(datetime.datetime(2018, 6, 12, 14, 3, 30).timestamp())},
+        {'process': 'sublime_text', 'title': '/auto-toggl/autotoggl.py (auto-toggl) - Sublime Text', 'start': int(datetime.datetime(2018, 6, 12, 14, 5).timestamp())},
+        {'process': 'explorer', 'title': 'C:\\some\\path', 'start': int(datetime.datetime(2018, 6, 12, 14, 7).timestamp())},
+        {'process': 'sublime_text', 'title': '/auto-toggl/autotoggl.py (auto-toggl) - Sublime Text', 'start': int(datetime.datetime(2018, 6, 12, 14, 22).timestamp())},
+        {'process': 'explorer', 'title': 'C:\\some\\path', 'start': int(datetime.datetime(2018, 6, 12, 14, 24).timestamp())},
+        {'process': 'powershell', 'title': 'Windows Powershell', 'start': int(datetime.datetime(2018, 6, 12, 15, 54).timestamp())},
+        {'process': 'chrome', 'title': 'Politics', 'start': int(datetime.datetime(2018, 6, 12, 15, 54, 45).timestamp())},
+        {'process': 'chrome', 'title': 'StarCraft on Reddit', 'start': int(datetime.datetime(2018, 6, 12, 16, 54, 45).timestamp())},
+        {'process': 'System.SessionLock', 'title': '__SYS__', 'start': int(datetime.datetime(2018, 6, 12, 16, 55, 30).timestamp())},
+        {'process': 'System.SessionUnlock', 'title': '__SYS__', 'start': int(datetime.datetime(2018, 6, 12, 16, 56, 15).timestamp())},
+        {'process': 'chrome', 'title': 'beatonma (Michael Beaton) - GitHub', 'start': int(datetime.datetime(2018, 6, 12, 18, 26, 15).timestamp())},
+        {'process': 'studio64', 'title': 'Commons - [/path/to/project] - File.java - Android Studio', 'start': int(datetime.datetime(2018, 6, 12, 18, 27, 45).timestamp())},
+        {'process': 'explorer', 'title': 'C:\\some\\path', 'start': int(datetime.datetime(2018, 6, 12, 18, 57, 45).timestamp())},
+        {'process': 'explorer', 'title': 'C:\\some\\other\\path', 'start': int(datetime.datetime(2018, 6, 12, 19, 27, 45).timestamp())},
+        {'process': 'chrome', 'title': 'Google', 'start': int(datetime.datetime(2018, 6, 12, 19, 28, 30).timestamp())},
+        {'process': 'System.Idle', 'title': '__SYS__', 'start': int(datetime.datetime(2018, 6, 12, 19, 30).timestamp())},
+        {'process': 'System.UnIdle', 'title': '__SYS__', 'start': int(datetime.datetime(2018, 6, 12, 19, 31, 30).timestamp())},
+        {'process': 'sublime_text', 'title': '/gdbackup/gdbackup.py (gdbackup) - Sublime Text', 'start': int(datetime.datetime(2018, 6, 12, 19, 32, 15).timestamp())},
+        {'process': 'System.SessionLogoff', 'title': '__SYS__', 'start': int(datetime.datetime(2018, 6, 12, 19, 34, 15).timestamp())},
     ]
 
-    equal(len(events), len(EXPECTED_VALUES), data=events)
+    expected_values = [
+        {
+            'process': 'chrome',
+            'title': 'reddit: the front page of the internet',
+            'start': int(datetime.datetime(2018, 6, 12, 10, 30).timestamp()),
+            'duration': 3600
+        },
+        {
+            'process': 'sublime_text',
+            'title': '/auto-toggl/autotoggl.py (auto-toggl) - Sublime Text',
+            'start': int(datetime.datetime(2018, 6, 12, 11, 30).timestamp()),
+            'duration': 9090
+        },
+        {
+            'process': 'sublime_text',
+            'title': '/auto-toggl/autotoggl.py (auto-toggl) - Sublime Text',
+            'start': int(datetime.datetime(2018, 6, 12, 14, 5).timestamp()),
+            'duration': 6585
+        },
+        {
+            'process': 'chrome',
+            'title': 'Politics',
+            'start': int(datetime.datetime(2018, 6, 12, 15, 54, 45).timestamp()),
+            'duration': 3645
+        },
+        {
+            'process': 'studio64',
+            'title': 'Commons - [/path/to/project] - File.java - Android Studio',
+            'start': int(datetime.datetime(2018, 6, 12, 18, 27, 45).timestamp()),
+            'duration': 3735
+        },
+        {
+            'process': 'sublime_text',
+            'title': '/gdbackup/gdbackup.py (gdbackup) - Sublime Text',
+            'start': int(datetime.datetime(2018, 6, 12, 19, 32, 15).timestamp()),
+            'duration': 120
+        }
+    ]
 
-    for x, y in zip(events, EXPECTED_VALUES):
-        equal(int(x.duration), int(y['duration']), data=[x, y])
+    config = test_common.get_test_config()
+
+    events = [autotoggl.Event(**x) for x in test_events]
+    autotoggl.categorise_events(events, config.defs())
+    events = autotoggl.compress_events(events, config)
+
+    equal(len(events), len(expected_values), data=events)
+
+    for x, y in zip(events, expected_values):
+        equal(x.start, y['start'], data=[x, y])
         equal(x.process, y['process'], data=[x, y])
         equal(x.title, y['title'], data=[x, y])
+        equal(int(x.duration), int(y['duration']), data=[x, y])
 
     render_events(events)
 
