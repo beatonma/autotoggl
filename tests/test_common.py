@@ -35,6 +35,8 @@ def equal(actual, expected, comment='', data=None):
         logger.warn('ASSERTION ERROR (NOT EQUAL):')
         logger.warn('  Expected: {}'.format(expected))
         logger.warn('    Actual: {}'.format(actual))
+        if type(actual) == type(expected) == int:
+            logger.warn('Difference: {}'.format(abs(actual - expected)))
         if comment:
             logger.warn('   Comment: {}'.format(comment))
         if data:
@@ -42,7 +44,13 @@ def equal(actual, expected, comment='', data=None):
                 logger.warn(
                     '      Data: {}'.format(json.dumps(data, indent=2)))
             except:
-                logger.warn('   Data: {}'.format(data))
+                if type(data) is list:
+                    logger.warn('   Data:')
+
+                    for x in data:
+                        logger.warn('     {}'.format(x))
+                else:
+                    logger.warn('   Data: {}'.format(data))
         raise SystemExit()
 
 
