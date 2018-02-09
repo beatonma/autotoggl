@@ -91,14 +91,16 @@ class Config:
     def _load_from_clargs(self, args=None):
         if args is None:
             parser = ArgumentParser()
+            subparsers = parser.add_subparsers(dest='ns')
+
             parser.add_argument(
-                'day',
+                '--day',
                 choices=[
                     'today',
                     'yesterday',
                     '',
                 ],
-                default='',
+                default='yesterday',
                 nargs='?',
             )
 
@@ -155,7 +157,6 @@ class Config:
                 help='Show all events for the given day without any '
                      'filtering')
 
-            subparsers = parser.add_subparsers(dest='ns')
             cleanup_parser = subparsers.add_parser('clean')
             cleanup_parser.add_argument(
                 '-before',
