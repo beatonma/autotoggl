@@ -337,6 +337,10 @@ def main() -> None:
     with DatabaseManager() as db:
         config = load_config()
 
+        if config.config:
+            os.startfile(os.path.normpath(CONFIG_FILE))
+            return
+
         if config.clean:
             db.clean_up(**config.clean)
             return

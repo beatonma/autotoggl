@@ -38,6 +38,7 @@ class Config:
         self.reset = False
         self.showall = False
         self.clean = False
+        self.config = False
 
         if file:
             self._load_from_file(file)
@@ -175,6 +176,8 @@ class Config:
                 help='Remove entries even if they have not been consumed',
                 )
 
+            config_parser = subparsers.add_parser('config')
+
             args = parser.parse_args()
 
         if not args:
@@ -205,6 +208,8 @@ class Config:
                 'older_than': args.older_than,
                 'all': args.all,
             }
+        elif args.ns == 'config':
+            self.config = True
 
     def _process_args(self):
         if self.date:
@@ -270,6 +275,7 @@ class Config:
             'reset': self.reset,
             'showall': self.showall,
             'clean': self.clean,
+            'config': self.config,
         }
 
     def _create_example_file(self, filename):
