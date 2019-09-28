@@ -3,29 +3,29 @@ import os
 from datetime import datetime, timedelta
 
 
-def render_events(events, file=os.path.expanduser('~/autotoggl/preview.html')):
-    colors = [
-        '#f44336',
-        '#2196f3',
-        '#4caf50',
-        '#9c27b0',
-        '#e91e63',
-        '#673ab7',
-        '#3f51b5',
-        '#03a9f4',
-        '#00bcd4',
-        '#009688',
-        '#8bc34a',
-        '#cddc39',
-        '#ffeb3b',
-        '#ffc107',
-        '#ff9800',
-        '#ff5722',
-        '#795548',
-        '#607d8b',
-    ]
+COLORS = [
+    '#f44336',
+    '#2196f3',
+    '#4caf50',
+    '#9c27b0',
+    '#e91e63',
+    '#673ab7',
+    '#3f51b5',
+    '#03a9f4',
+    '#00bcd4',
+    '#009688',
+    '#8bc34a',
+    '#cddc39',
+    '#ffeb3b',
+    '#ffc107',
+    '#ff9800',
+    '#ff5722',
+    '#795548',
+    '#607d8b',
+]
 
-    html_start = '''
+
+HTML_START = '''
 <!DOCTYPE html>
 <html>
 <head>
@@ -75,21 +75,41 @@ div{{
 {styles}
 </style>
 </head>
-<body><header>{start} -> {end}<br/>{events} events</header><div id="key">{key}</div><div id="hours">{hours}</div><div id="container">'''
+<body>
+<header>{start} -> {end}<br/>{events} events</header>
+<div id="key">{key}</div>
+<div id="hours">{hours}</div>
+<div id="container">
+'''
 
-    html_end = '''
+
+HTML_END = '''
 </div>
 <div id="hover"></div>
 <script>
-function show(text){{
+function show(text) {
     console.log(text);
     document.getElementById('hover').innerHTML = text;
-}}
+}
 </script>
 </body>
 </html>
-    '''
+'''
 
+
+HTML_EVENT = (
+    '<div class="event {project}" '
+    'style="left:{start}%;width:{width}%" '
+    'onmouseover="show(\'{about}\')"></div>'
+)
+
+
+HTML_ABOUT = (
+    '{project} - {description}: {start} -> {end} [{tags}]'
+)
+
+
+def render_events(events, file=os.path.expanduser('~/autotoggl/preview.html')):
     start = events[0].start
     end = events[-1].start + events[-1].duration
 
@@ -103,30 +123,25 @@ function show(text){{
         if not project:
             continue
         if project not in project_colors:
-            project_colors[project] = colors[len(project_colors)]
+            project_colors[project] = COLORS[len(project_colors)]
         content += (
-            '''
-            <div class="event {project}" style="left:{start}%;width:{width}%" onmouseover="show({about})"></div>'''
-            .format(
+            HTML_EVENT.format(
                 project=html.escape(project),
                 start=round(((e.start - start) / total_width * 100), 2),
                 width=round((e.duration / total_width * 100), 2),
-                about=html.escape('\'{}<br>{} -> {}\''.format(
-                    e.title,
-                    '{}{}'.format(
-                        e.start,
-                        datetime.fromtimestamp(e.start)),
-                    '{}{}'.format(
-                        e.start + e.duration,
-                        datetime.fromtimestamp(e.start + e.duration)))),
-                ))
+                about=html.escape(HTML_ABOUT.format(
+                    project=html.escape(_sanitize(e.project)),
+                    description=html.escape(_sanitize(e.description)),
+                    start=_format_timestamp(e.start),
+                    end=_format_timestamp(e.start + e.duration),
+                    tags=', '.join([f'#{t}' for t in e.tags])
+                ))))
 
-    styles = ['.{} {{background:{};}}'.format(x, y)
-              for x, y in project_colors.items()]
+    styles = [f'.{x} {{background:{y};}}'for x, y in project_colors.items()]
     key = [_key(x) for x in project_colors]
     with open(file, 'w') as f:
         f.write(
-            html_start.format(
+            HTML_START.format(
                 start=html.escape(datetime.fromtimestamp(start).isoformat()),
                 end=html.escape(datetime.fromtimestamp(end).isoformat()),
                 events=len(events),
@@ -134,7 +149,7 @@ function show(text){{
                 key=''.join(key),
                 hours=_hours(start, end)))
         f.write(content)
-        f.write(html_end)
+        f.write(HTML_END)
 
 
 def _key(project):
@@ -168,3 +183,12 @@ def _hours(start, end):
                 hour='|{}'.format(h % 24)
             ))
     return ''.join(hours)
+
+
+def _sanitize(path):
+    path = path or ''
+    return path.replace('\\', '/')
+
+
+def _format_timestamp(timestamp):
+    return datetime.fromtimestamp(timestamp).strftime('%H:%M')
