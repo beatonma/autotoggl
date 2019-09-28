@@ -26,7 +26,7 @@ autotoggl.BASE_DIR = os.path.expanduser('~/autotoggl/test/')
 autotoggl.DB_PATH = os.path.join(autotoggl.BASE_DIR, 'toggl.db')
 
 
-class Bunch(object):
+class Bunch:
     '''Dictionary wrapper'''
     def __init__(self, adict):
         self.__dict__.update(adict)
