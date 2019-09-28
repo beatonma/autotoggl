@@ -14,6 +14,7 @@ from autotoggl.config import Config
 from autotoggl.api import TogglApiInterface, ApiError
 from autotoggl.util import midnight
 
+
 BASE_DIR = os.path.expanduser('~/autotoggl/')
 DB_PATH = os.path.join(BASE_DIR, 'toggl.db')
 CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
@@ -82,9 +83,9 @@ class DatabaseManager:
 
         sql = '''CREATE TABLE toggl
                  (process_name TEXT NOT NULL,
-                  window_title TEXT NOT NULL,
-                  start INTEGER NOT NULL,
-                  consumed BOOLEAN NOT NULL DEFAULT 0)'''
+                 window_title TEXT NOT NULL,
+                 start INTEGER NOT NULL,
+                 consumed BOOLEAN NOT NULL DEFAULT 0)'''
         cursor.execute(sql)
         cursor.close()
         conn.commit()
@@ -106,6 +107,7 @@ class DatabaseManager:
                 'Cannot execute query: database connection '
                 'has already been closed.')
         try:
+            logger.info(f"exec: {args}")
             return self.cursor.execute(*args)
         except Exception as e:
             logger.error(
@@ -121,15 +123,13 @@ class DatabaseManager:
             before = midnight(datetime.datetime.now()
                               - timedelta(days=older_than_days))
 
-        logger.warn('Removing events before {}'.format(before.isoformat()))
+        logger.warning('Removing events before {}'.format(before.isoformat()))
         before_timestamp = before.timestamp()
         if clear_all:
-            sql = '''DELETE FROM toggl
-                     WHERE start<?'''
+            sql = '''DELETE FROM toggl WHERE start<?'''
             self.exec(sql, (before_timestamp,))
         else:
-            sql = '''DELETE FROM toggl
-                     WHERE start<? AND consumed=?'''
+            sql = '''DELETE FROM toggl WHERE start<? AND consumed=?'''
             self.exec(sql, (before_timestamp, True))
 
         changes = self.exec('''SELECT changes()''').fetchone()[0]
@@ -154,8 +154,7 @@ class DatabaseManager:
     def get_events(self, start_datetime, end_datetime) -> List[Event]:
         c = self.exec(
             '''SELECT rowid, process_name, window_title, start, consumed
-               FROM toggl
-               WHERE start>=? AND start<=?''',
+               FROM toggl WHERE start>=? AND start<=?''',
             (start_datetime.timestamp(), end_datetime.timestamp()))
         return [
             Event(
@@ -183,6 +182,16 @@ def get_events_for_date(db, date, day_ends_at=3) -> List[Event]:
     date_starts = date.replace(
         hour=day_ends_at, minute=0, second=0, microsecond=0)
     date_ends = date_starts + timedelta(days=1)
+    logger.info(
+        'Getting events between {} and {}'.format(date_starts, date_ends))
+
+    return db.get_events(date_starts, date_ends)
+
+
+def get_events_until(db, date_ends, day_ends_at=3) -> List[Event]:
+    """Return all events that occurred before end of date_end."""
+    date_starts = datetime.datetime.fromtimestamp(1000000)
+    date_ends = date_ends.replace(hour=day_ends_at)
     logger.info(
         'Getting events between {} and {}'.format(date_starts, date_ends))
 
@@ -310,7 +319,7 @@ def submit(interface, projects) -> Tuple[List[int], List[int]]:
             try:
                 interface.create_project(p)
             except ApiError as e:
-                logger.warn(e)
+                logger.warning(e)
 
         for e in events:
             if e.consumed:
@@ -327,10 +336,33 @@ def submit(interface, projects) -> Tuple[List[int], List[int]]:
                 successful.append(e)
             except ApiError as err:
                 failed.append(e)
-                logger.warn(err)
+                logger.warning(err)
             time.sleep(1)
 
     return successful, failed
+
+
+def _send_notification(content, successful=None, failed=None):
+    try:
+        from bmanotify import EventNotifier
+    except:
+        logger.warning('Cannot send notification: bmanotify is not installed')
+        return
+
+    try:
+    # success_text = '\n'.join(successful) if successful else None
+        fail_text = '\n'.join(failed) if failed else None
+        EventNotifier(
+            title='autotoggl',
+            body='{}{}'.format(
+                '\n'.join(content),
+                '\n\n{} submissions failed:\n{}'.format(
+                    len(failed), fail_text)) if failed else '',
+            tag='autotoggl,quiet',
+            color='#303F9F',
+        ).send()
+    except Exception as e:
+        logger.warning(f'Error sending notification: {e}')
 
 
 def main() -> None:
@@ -354,7 +386,11 @@ def main() -> None:
                     config.day_ends.isoformat()))
             return
 
-        events = get_events_for_date(db, config.date, config.day_ends_at)
+        if config.catchup:
+            events = get_events_until(db, config.date, config.day_ends_at)
+        else:
+            events = get_events_for_date(db, config.date, config.day_ends_at)
+
         categorise_events(
             events, config.classifiers)
         events = compress_events(events, config)
@@ -373,10 +409,18 @@ def main() -> None:
             autotoggl.render.render_events(events)
 
         pending_submission = 0
+        notification_content = []
         for p in projects:
             n_total_events = len(projects[p])
             projects[p] = [e for e in projects[p] if not e.consumed]
             n_pending_events = len(projects[p])
+            notification_content.append(
+                '{project}: [{duration}] {pending} events'
+                .format(
+                    project=p,
+                    duration=timedelta(
+                        seconds=get_total_duration(projects[p])),
+                    pending=n_pending_events))
             logger.info(
                 'Project \'{project}\': [{duration}] {pending} events '
                 '({consumed} already consumed)'
@@ -391,10 +435,15 @@ def main() -> None:
             api = TogglApiInterface(config)
             successful, failed = submit(api, projects)
 
+            _send_notification(
+                notification_content,
+                successful=successful,
+                failed=failed)
+
             db.consume(successful)
 
             if failed:
-                logger.warn(
+                logger.warning(
                     '{} events failed to be submitted'.format(len(failed)))
 
 
