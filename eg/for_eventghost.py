@@ -26,7 +26,7 @@ SYSTEM_EVENTS = [
     'System.SessionLoggoff',
     'System.OnEndSession',
 ]
-IGNORE_PROCESSES = [
+PROCESS_BLACKLIST = [
     'explorer',
     'powershell',
     'ShellExperienceHost',
@@ -96,7 +96,7 @@ if not title:
     # Ignore windows with empty titles
     raise SystemExit()
 
-if process_name in IGNORE_PROCESSES:
+if process_name in PROCESS_BLACKLIST:
     # Ignore unwanted processes
     raise SystemExit()
 
