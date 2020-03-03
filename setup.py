@@ -8,7 +8,7 @@ setup(
     version=autotoggl.__version__,
     description='Toggl + EventGhost',
     install_requires=[
-        'requests==2.18.4',
+        'requests>=2.22.0',
     ],
     url='https://beatonma.org/autotoggl',
     packages=[
@@ -20,4 +20,4 @@ setup(
         ],
     },
     zip_safe=False,
-    )
+)
